@@ -9,10 +9,12 @@ from tempfile import mktemp
 import logging
 from pathlib import Path
 import uuid
+import serial
+import json
 
 CURRENT_PATH = os.path.dirname(os.path.abspath(__file__))
 LOG_FILENAME = Path(CURRENT_PATH, 'log.txt')
-logging.basicConfig(filename=LOG_FILENAME,level=logging.DEBUG)
+logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s',filename=LOG_FILENAME,level=logging.DEBUG, datefmt='%Y-%m-%d %H:%M:%S')
 
 PHOTO_LENGTH = 4 # number of photos to take
 PHOTO_PAUSE = 5 # in seconds
@@ -29,18 +31,32 @@ if not CAPTURE_FOLDER.exists():
 
 # Create background image if it doesn't exist
 try:
-        PROCESS_FILE_BACKGROUND = Image.open(Path(PROCESS_ASSETS_FOLDER, 'background.png'))
+        PROCESS_FILE_BACKGROUND = Image.open(Path(PROCESS_ASSETS_FOLDER, 'background.jpg'))
 except FileNotFoundError:
-        PROCESS_FILE_BACKGROUND = Image.new('RGB', (6000, 4000), color='black')
-        PROCESS_FILE_BACKGROUND.save(Path(PROCESS_ASSETS_FOLDER, 'background.png'))
+        PROCESS_FILE_BACKGROUND = Image.new('RGB', (3600, 2400), color='white')
+        PROCESS_FILE_BACKGROUND.save(Path(PROCESS_ASSETS_FOLDER, 'background.jpg'))
 
 # Create mask image if it doesn't exist
 try:
-        PROCESS_FILE_MASK = Image.open(Path(PROCESS_ASSETS_FOLDER, 'mask.png'))
+        PROCESS_FILE_MASK = Image.open(Path(PROCESS_ASSETS_FOLDER, 'mask.jpg'))
 except FileNotFoundError:
-        PROCESS_FILE_MASK = Image.new('RGB', (6000, 4000), color='black')
-        PROCESS_FILE_MASK.save(Path(PROCESS_ASSETS_FOLDER, 'mask.png'))
+        PROCESS_FILE_MASK = Image.new('RGB', (875, 1150), color='white')
+        PROCESS_FILE_MASK.save(Path(PROCESS_ASSETS_FOLDER, 'mask.jpg'))
 
+# Create logo image if it doesn't exist
+try:
+        PROCESS_FILE_LOGO = Image.open(Path(PROCESS_ASSETS_FOLDER, 'logo.png'))
+except FileNotFoundError:
+        PROCESS_FILE_LOGO = Image.new('RGB', (0, 0), color='white')
+        PROCESS_FILE_LOGO.save(Path(PROCESS_ASSETS_FOLDER, 'logo.png'))
+
+# Final image for print (dnp ds 40 eat the borders / fond perdu)
+try:
+        PROCESS_FILE_MARGIN = Image.open(Path(PROCESS_ASSETS_FOLDER, 'margin.jpg'))
+except FileNotFoundError:
+        PROCESS_FILE_MARGIN = Image.new('RGB', (3700, 2500), color='white')
+        PROCESS_FILE_MARGIN.save(Path(PROCESS_ASSETS_FOLDER, 'margin.png'))
+        
 # Raspberry Pi
 ON_RASP = False # will be set to True if running on Raspberry Pi
 GPIO_INPUT = 15 # GPIO pin to use for input
@@ -50,8 +66,15 @@ try:
         GPIO.setmode(GPIO.BCM)
         GPIO.setup(GPIO_INPUT, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
         ON_RASP = True
-except RuntimeError:
+except FileNotFoundError:
         logging.debug("Error importing RPi.GPIO")
+        
+# Serial arduino
+try:
+        ser = serial.Serial('/dev/ttyUSB0', 9600, timeout=1)
+        ser.reset_input_buffer()
+except FileNotFoundError:
+        logging.debug("Error serial arduino")
 
 def capture_webcam():
 
@@ -87,7 +110,7 @@ def init_camera():
 
                 if error >= gp.GP_OK:
                         # operation completed successfully so exit loop
-                        bprinireak
+                        break
                 if error != gp.GP_ERROR_MODEL_NOT_FOUND:
                         # some other error we can't handle here
                         raise gp.GPhoto2Error(error)
@@ -118,7 +141,7 @@ def capture(camera):
                 start = time.time()
 
                 filename = str(image_index) + '.jpg'
-                target = Path(CAPTURE_PATH, filename)
+                target = os.path.join(CAPTURE_PATH, filename)
                 logging.info('Capture - Copying image to' + str(target))
 
                 #capture
@@ -146,36 +169,46 @@ def process(capture_uuid):
         im3 = Image.open(Path(CAPTURE_PATH, '2.jpg'))
         im4 = Image.open(Path(CAPTURE_PATH, '3.jpg'))
 
-        #resize
+        
         #crop = (200,0,1784,1984)
         #crop = (220,10,1774,1964)
-        crop = (948,10,2508,1964)
-        #crop = (848,50,2608,1963)
+        #crop = (948,10,2508,1964)
+        crop = (744,0,2232,1984)
         im1 = im1.crop(crop)
-        im1.save(Path(CAPTURE_PATH, '0resize.jpg'), quality=95)
         im2 = im2.crop(crop)
         im3 = im3.crop(crop)
         im4 = im4.crop(crop)
+        
+        #resize
+        (width, height) = (875,1150)
+        im1 = im1.resize((width, height))
+        im2 = im2.resize((width, height))
+        im3 = im3.resize((width, height))
+        im4 = im4.resize((width, height))
 
         mask = PROCESS_FILE_MASK.resize(im1.size)
         mask = mask.convert('L')
 
         #im1.save('/tmp/0.jpg', quality=95)
         start = time.time()
-        PROCESS_FILE_BACKGROUND.paste(im1, (200, 250), mask)
-        PROCESS_FILE_BACKGROUND.paste(im2, (1804, 250), mask)
-        PROCESS_FILE_BACKGROUND.paste(im3, (3408, 250), mask)
-        PROCESS_FILE_BACKGROUND.paste(im4, (5012, 250), mask)
+        PROCESS_FILE_BACKGROUND.paste(im1, (20, 20), mask)
+        PROCESS_FILE_BACKGROUND.paste(im2, (915, 20), mask)
+        PROCESS_FILE_BACKGROUND.paste(im3, (1810, 20), mask)
+        PROCESS_FILE_BACKGROUND.paste(im4, (2705, 20), mask)
         #noir et blanc
-        PROCESS_FILE_BACKGROUND.paste(im1.convert('L'), (200, 2525), mask)
-        PROCESS_FILE_BACKGROUND.paste(im2.convert('L'), (1804, 2525), mask)
-        PROCESS_FILE_BACKGROUND.paste(im3.convert('L'), (3408, 2525), mask)
-        PROCESS_FILE_BACKGROUND.paste(im4.convert('L'), (5012, 2525), mask)
-
-        PROCESS_FILE_BACKGROUND.save(Path(CAPTURE_PATH, 'print.jpg'), quality=95)
-
-        end = time.time() - start
-        logging.info(end)
+        PROCESS_FILE_BACKGROUND.paste(im1.convert('L'), (20, 1225), mask)
+        PROCESS_FILE_BACKGROUND.paste(im2.convert('L'), (915, 1225), mask)
+        PROCESS_FILE_BACKGROUND.paste(im3.convert('L'), (1810, 1225), mask)
+        PROCESS_FILE_BACKGROUND.paste(im4.convert('L'), (2705, 1225), mask)
+        
+        #logos
+        PROCESS_FILE_BACKGROUND.paste(PROCESS_FILE_LOGO, (20, 800), PROCESS_FILE_LOGO)
+        PROCESS_FILE_BACKGROUND.paste(PROCESS_FILE_LOGO, (20, 2000), PROCESS_FILE_LOGO)
+        
+        #Add margins
+        PROCESS_FILE_MARGIN.paste(PROCESS_FILE_BACKGROUND, (17,75))
+        PROCESS_FILE_MARGIN.save(Path(CAPTURE_PATH, 'print.jpg'), quality=95)
+        
 
 def print_image(capture_uuid):
 
@@ -190,7 +223,7 @@ def print_image(capture_uuid):
 
         # Save data to a temporary file
         CAPTURE_PATH = Path(CAPTURE_FOLDER, str(capture_uuid))
-        imgPrint = Image.open(Path(CAPTURE_PATH, 'print.jpg'))
+        imgPrint = Image.open(os.path.join(CAPTURE_PATH, 'print.jpg'))
 
         output = mktemp(prefix='jpg')
         imgPrint.save(output, format='jpeg')
@@ -212,12 +245,21 @@ def main():
                 #Boucle de la mort
                 while True:
 
-                        #Impulsion de 100ms de l'arduino
-                        if GPIO.input(GPUIO_INPUT):
-
-                                capture_uuid = capture(camera)
-                                output = process(capture_uuid)
-                                print_image(output)
+                    #Commande" via serial de l'arduino
+                    jason = {}
+                    if ser.in_waiting > 0:
+                        line = ser.readline().decode('utf-8').rstrip()
+                        try:
+                            jason = json.loads(line)
+                        except json.decoder.JSONDecodeError:
+                            logging.info("Not json:" + str(line))
+                        
+                        logging.info("json:" + str(jason))
+                        
+                        if 'cmd' in jason and jason["cmd"] == 1:
+                            capture_uuid = capture(camera)
+                            output = process(capture_uuid)
+                            print_image(capture_uuid)
 
                 return 0
         else:
