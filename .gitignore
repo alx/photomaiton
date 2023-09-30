@@ -3,4 +3,5 @@ base/captures/
 base/config.json
 remote/mastodon/
 remote/tests/assets/
+remote/tests/scripts/
 base/log.txt
