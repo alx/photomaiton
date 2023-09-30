@@ -1,0 +1,8 @@
+{
+	"log_filename": "log.txt",
+	"photo_count": 4,
+	"photo_pause": 5,
+	"mastodon_enable": false,
+	"mastodon_base_url": "https://mastodon.tetaneutral.net",
+	"mastodon_access_token": "Find token here -> https://mastodon.tetaneutral.net/settings/applications"
+}

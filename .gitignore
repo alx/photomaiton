@@ -1,5 +1,6 @@
 .venv/
 base/captures/
+base/config.json
 remote/mastodon/
 remote/tests/assets/
 base/log.txt
