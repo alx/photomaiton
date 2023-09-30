@@ -1,3 +1,5 @@
 .venv/
-captures/
-log.txt
+base/captures/
+remote/mastodon/
+remote/tests/assets/
+base/log.txt
