@@ -1,6 +1,0 @@
-cups==0.0.6
-gphoto2==2.5.0
-numpy==1.25.2
-opencv-python==4.8.0.76
-Pillow==10.0.0
-RPi.GPIO==0.7.1
