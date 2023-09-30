@@ -1,7 +1,11 @@
+*.pyc
 .venv/
-base/captures/
+
 base/config.json
-remote/mastodon/
-remote/tests/assets/
-remote/tests/scripts/
 base/log.txt
+base/captures/
+
+remote/config.json
+remote/log.txt
+remote/mastodon/
+remote/tests/

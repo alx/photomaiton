@@ -1,0 +1,13 @@
+{
+	"log_filename": "log.txt",
+	"mastodon_base_url": "https://mastodon.tetaneutral.net",
+	"mastodon_access_token": "Find token here -> https://mastodon.tetaneutral.net/settings/applications"
+	"mastodon_whitelist_account_ids": [
+		28695
+	],
+	"mastodon_capture_folder": "mastodon",
+	"processor": {
+		"type": "cpu",
+		"gpu_id": 0
+	}
+}
