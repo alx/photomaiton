@@ -31,6 +31,7 @@ except ImportError:
 class ImageProcessor:
     def __init__(self, config, logging):
         self.config = config
+        self.process_config = config["processor"]
         self.logging = logging
 
     def run(self, status, capture):
@@ -46,9 +47,9 @@ class ImageProcessor:
 
     def dst_path(self, capture):
         dst_filename = f"%s%s%s.%s" % (
-            self.config["processor"]["output_prefix"],
+            self.process_config["output_prefix"],
             capture["capture_id"],
-            self.config["processor"]["output_suffix"],
+            self.process_config["output_suffix"],
             capture["extension_id"],
         )
 
