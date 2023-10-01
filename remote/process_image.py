@@ -8,17 +8,6 @@ import logging
 
 CURRENT_PATH = os.path.dirname(os.path.abspath(__file__))
 
-with open(Path(CURRENT_PATH, 'config.json'), 'r') as f:
-    config = json.load(f)
-
-LOG_FILENAME = Path(CURRENT_PATH, config["log_filename"])
-logging.basicConfig(filename=LOG_FILENAME, level=logging.DEBUG)
-
-print(f"Loading config: {config}")
-CAPTURE_FOLDER = Path(CURRENT_PATH, config["mastodon_capture_folder"])
-if not CAPTURE_FOLDER.exists():
-    os.makedirs(CAPTURE_FOLDER)
-
 try:
     from diffusers import (
         StableDiffusionXLAdapterPipeline,
@@ -36,52 +25,53 @@ try:
     import skimage.io
     import skimage.util
 except ImportError:
-    print("Error importing diffusers. Is it installed?")
+    print("Error importing diffusers, it will run fine on CPU")
+
 
 class ImageProcessor:
+    def __init__(self, config, logging):
+        self.config = config
+        self.logging = logging
 
-    def run(self, capture_id, status):
-
-        if config["processor"]["type"] == "cpu":
-            self.process_cpu(capture_id, status)
-
+    def run(self, status, capture):
+        if self.config["processor"]["type"] == "cpu":
+            return self.process_cpu(status, capture)
         else:
-            self.process_depth(capture_id, status)
+            return self.process_gpu(status, capture)
 
-    def create_hash(self, input_string: str):
-        pairs = input_string.split("|")
-        hash_dict = {}
-        for pair in pairs:
-            key_value = pair.strip().split(":")
-            key = key_value[0].strip()
-            try:
-                value = float(key_value[1].strip())
-            except ValueError:
-                value = key_value[1].strip()
-            hash_dict[key] = value
-        return hash_dict
+    def src_path(self, capture):
+        src_filename = f"%s.%s" % (capture["capture_id"], capture["extension"])
 
+        return Path(CURRENT_PATH, self.config["mastodon_capture_folder"], src_filename)
 
-    def process_cpu(self, capture_id, status):
-
-        capture_filepath = Path(CAPTURE_FOLDER, f"{capture_id}.jpg")
-        dst_img = Path(
-            CAPTURE_FOLDER, f"%s%s%s.jpg" % (OUTPUT_PREFIX, capture_id, OUTPUT_SUFFIX)
+    def dst_path(self, capture):
+        dst_filename = f"%s%s%s.%s" % (
+            self.config["processor"]["output_prefix"],
+            capture["capture_id"],
+            self.config["processor"]["output_suffix"],
+            capture["extension_id"],
         )
 
-        image = Image.open(capture_filepath)
+        return Path(CURRENT_PATH, self.config["mastodon_capture_folder"], dst_filename)
+
+    def process_cpu(self, status, capture):
+        src_path = self.src_path(capture)
+        dst_path = self.dst_path(capture)
+
+        image = Image.open(src_path)
         inverted_image = PIL.ImageOps.invert(image)
-        inverted_image.save(dst_img)
+        inverted_image.save(dst_path)
 
-    def process_depth(self, capture_id, status):
+        return str(dst_path)
 
-        GUIDANCE_SCALE = 15
-        INFERENCE_STEPS = 30
+    def process_gpu(self, status, capture):
+        return self.process_depth(status_capture)
 
-        OUTPUT_PREFIX = "response_"
-        OUTPUT_SUFFIX = ""
+    def process_depth(self, status, capture):
+        src_path = self.src_path(capture)
+        dst_path = self.dst_path(capture)
 
-        device = torch.device("cuda:%i" % config["processor"]["gpu_id"])
+        device = torch.device("cuda:%i" % self.config["processor"]["gpu_id"])
 
         zoe_depth = ZoeDetector.from_pretrained(
             "valhalla/t2iadapter-aux-models",
@@ -89,45 +79,28 @@ class ImageProcessor:
             model_type="zoedepth_nk",
         ).to(device)
 
-        capture_filepath = Path(CAPTURE_FOLDER, f"{capture_id}.jpg")
-
-        image = load_image(Image.open(capture_filepath))
+        image = load_image(Image.open(src_path))
         image = zoe_depth(
             image, gamma_corrected=True, detect_resolution=512, image_resolution=1024
         )
 
-        prompt = "photo, portrait, standing, inside a cabin"
-        negative_prompt = ""
-
-        # status_hash = self.create_hash(status_text(status))
-        # if hasattr(status_hash, "prompt"):
-        #     prompt = status_hash["prompt"]
-        # if hasattr(status_hash, "negative_prompt"):
-        #     negative_prompt = status_hash["negative_prompt"]
-
         gen_images = pipe(
-            prompt=prompt,
-            negative_prompt=negative_prompt,
+            prompt=self.config["processor"]["prompt"],
+            negative_prompt=self.config["processor"]["negative_prompt"],
             image=image,
             num_inference_steps=30,
             adapter_conditioning_scale=1,
             guidance_scale=7.5,
         ).images[0]
-        dst_img = Path(
-            CAPTURE_FOLDER, f"%s%s%s.jpg" % (OUTPUT_PREFIX, capture_id, OUTPUT_SUFFIX)
-        )
-        gen_images.save(str(dst_img))
 
-        return str(dst_img)
+        gen_images.save(str(dst_path))
+        return str(dst_path)
 
-    def process_t2i_sdxl(self, capture_id, status):
-        GUIDANCE_SCALE = 15
-        INFERENCE_STEPS = 30
+    def process_t2i_sdxl(self, status, capture):
+        src_path = self.src_path(capture)
+        dst_path = self.dst_path(capture)
 
-        OUTPUT_PREFIX = "response_"
-        OUTPUT_SUFFIX = ""
-
-        device = torch.device("cuda:%i" % config["processor"]["gpu_id"])
+        device = torch.device("cuda:%i" % self.config["processor"]["gpu_id"])
 
         # load adapter
         adapter = T2IAdapter.from_pretrained(
@@ -160,32 +133,40 @@ class ImageProcessor:
             model_type="zoedepth_nk",
         ).to(device)
 
-        capture_filepath = Path(CAPTURE_FOLDER, f"{capture_id}.jpg")
-        image = load_image(str(capture_filepath))
+        image = load_image(str(src_path))
         image = zoe_depth(
             image, gamma_corrected=True, detect_resolution=512, image_resolution=1024
         )
 
-        prompt = "couple of french bulldog  on a mini boat for a romantic ride on a flowery lake , many little butterflies are flying, wearing elegant attire, pink sunglasses, a bandana, big golden necklace, by anthro, very detailed, intrincated, cinematic light"
-        negative_prompt = "((overexposure)), ((high contrast)),(((cropped))), (((watermark))), ((logo)), ((barcode)), ((UI)), ((signature)), ((text)), ((label)), ((error)), ((title)), stickers, markings, speech bubbles, lines, cropped, lowres, low quality, artifacts"
+        gen_images = pipe(
+            prompt=self.config["processor"]["prompt"],
+            negative_prompt=self.config["processor"]["negative_prompt"],
+            image=image,
+            num_inference_steps=30,
+            adapter_conditioning_scale=1,
+            guidance_scale=7.5,
+        ).images[0]
 
+        gen_images.save(str(dst_path))
+        return str(dst_path)
+
+    def create_hash(self, input_string: str):
+        # Use it with following code:
+        #
         # status_hash = self.create_hash(status_text(status))
         # if hasattr(status_hash, "prompt"):
         #     prompt = status_hash["prompt"]
         # if hasattr(status_hash, "negative_prompt"):
         #     negative_prompt = status_hash["negative_prompt"]
 
-        gen_images = pipe(
-            prompt=prompt,
-            negative_prompt=negative_prompt,
-            image=image,
-            num_inference_steps=30,
-            adapter_conditioning_scale=1,
-            guidance_scale=7.5,
-        ).images[0]
-        dst_img = Path(
-            CAPTURE_FOLDER, f"%s%s%s.jpg" % (OUTPUT_PREFIX, capture_id, OUTPUT_SUFFIX)
-        )
-        gen_images.save(str(dst_img))
-
-        return str(dst_img)
+        pairs = input_string.split("|")
+        hash_dict = {}
+        for pair in pairs:
+            key_value = pair.strip().split(":")
+            key = key_value[0].strip()
+            try:
+                value = float(key_value[1].strip())
+            except ValueError:
+                value = key_value[1].strip()
+            hash_dict[key] = value
+        return hash_dict
