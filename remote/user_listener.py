@@ -11,8 +11,9 @@ CURRENT_PATH = os.path.dirname(os.path.abspath(__file__))
 
 
 class UserListener(StreamListener):
-    def __init__(self, config, logging):
+    def __init__(self, config, mastodon, logging):
         self.config = config
+        self.mastodon = mastodon
         self.logging = logging
         self.processor = ImageProcessor(config, logging)
 
@@ -54,9 +55,9 @@ class UserListener(StreamListener):
         response_filepath = self.processor.run(status, capture)
         self.logging.debug(f"Response {response_filepath}")
 
-        mastodon_media_id = mastodon.media_post(response_filepath)
+        mastodon_media_id = self.mastodon.media_post(response_filepath)
 
-        mastodon.status_post(
+        self.mastodon.status_post(
             status=self.config["mastodon_capture_reply_text"],
             in_reply_to_id=status["id"],
             media_ids=mastodon_media_id,

@@ -34,7 +34,7 @@ def stream_from_server():
     while True:
         try:
             logging.debug("Start listening to stream")
-            mastodon.stream_user(UserListener(config, logging))
+            mastodon.stream_user(UserListener(config, mastodon, logging))
         except Exception as e:
             logging.debug(f"Error in stream_public: {e}. Restarting...")
 
