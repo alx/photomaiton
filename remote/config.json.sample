@@ -6,8 +6,14 @@
 		28695
 	],
 	"mastodon_capture_folder": "mastodon",
+	"mastodon_capture_allowed_extensions": ["jpg", "png"],
+	"mastodon_capture_reply_text": "We're all just trying to maintain",
 	"processor": {
 		"type": "cpu",
-		"gpu_id": 0
+		"gpu_id": 0,
+		"output_prefix": "response_",
+		"output_suffix": "",
+        "prompt": "photo, portrait, standing, inside a cabin",
+        "negative_prompt": ""
 	}
 }
