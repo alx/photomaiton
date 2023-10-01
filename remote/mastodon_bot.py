@@ -20,6 +20,7 @@ logging.basicConfig(
     level=logging.DEBUG,
     datefmt="%Y-%m-%d %H:%M:%S",
 )
+logging.getLogger().addHandler(logging.StreamHandler())
 
 try:
     mastodon = Mastodon(
