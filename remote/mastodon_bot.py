@@ -10,32 +10,37 @@ from user_listener import UserListener
 
 CURRENT_PATH = os.path.dirname(os.path.abspath(__file__))
 
-with open(Path(CURRENT_PATH, 'config.json'), 'r') as f:
+with open(Path(CURRENT_PATH, "config.json"), "r") as f:
     config = json.load(f)
 
 LOG_FILENAME = Path(CURRENT_PATH, config["log_filename"])
-logging.basicConfig(filename=LOG_FILENAME, level=logging.DEBUG)
-
-WHITELISTED_ACCOUNTS = config["mastodon_whitelist_account_ids"]
+logging.basicConfig(
+    format="%(asctime)s %(levelname)s %(message)s",
+    filename=LOG_FILENAME,
+    level=logging.DEBUG,
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
 
 try:
     mastodon = Mastodon(
         api_base_url=config["mastodon_base_url"],
-        access_token=config["mastodon_access_token"]
+        access_token=config["mastodon_access_token"],
     )
 except Exception as e:
-    print(f"Error connecting to server {base_url}: {e}")
+    logging.debug(f"Error connecting to mastodon server {base_url}: {e}")
+
 
 def stream_from_server():
     while True:
         try:
-            print("Starting stream")
-            mastodon.stream_user(UserListener())
+            logging.debug("Start listening to stream")
+            mastodon.stream_user(UserListener(config, logging))
         except Exception as e:
-            print(f"Error in stream_public: {e}. Restarting...")
+            logging.debug(f"Error in stream_public: {e}. Restarting...")
+
 
 try:
     with ThreadPoolExecutor() as executor:
-        futures = [ executor.submit(stream_from_server) ]
+        futures = [executor.submit(stream_from_server)]
 except Exception as e:
-    print(f"Error running threads: {e}")
+    logging.debug(f"Error running threads: {e}")
