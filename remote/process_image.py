@@ -66,7 +66,7 @@ class ImageProcessor:
         return str(dst_path)
 
     def process_gpu(self, status, capture):
-        return self.process_depth(status_capture)
+        return self.process_depth(status, capture)
 
     def process_depth(self, status, capture):
         src_path = self.src_path(capture)
