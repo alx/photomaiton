@@ -7,5 +7,6 @@ base/captures/
 
 remote/config.json
 remote/log.txt
-remote/mastodon/
+remote/mastodon/*.jpg
+remote/mastodon/*.png
 remote/tests/
