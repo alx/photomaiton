@@ -18,7 +18,6 @@ with open(Path(CURRENT_PATH, "config.json"), "r") as f:
     config = json.load(f)
 
 LOG_FILENAME = Path(CURRENT_PATH, config["log_filename"])
-logging.basicConfig(filename=LOG_FILENAME, level=logging.DEBUG)
 logging.basicConfig(
     format="%(asctime)s %(levelname)s %(message)s",
     filename=LOG_FILENAME,
@@ -35,7 +34,7 @@ MASTODON_ENABLE = config["mastodon_enable"]
 if MASTODON_ENABLE:
     mastodon = Mastodon(
         api_base_url=config["mastodon_base_url"],
-        access_token=config["mastodon_access_token"]
+        access_token=config["mastodon_access_token"],
     )
 
 # Folder containing background
@@ -157,6 +156,7 @@ def init_camera():
 
     return camera
 
+
 def capture(camera):
     capture_uuid = uuid.uuid4()
     CAPTURE_PATH = Path(CAPTURE_FOLDER, str(capture_uuid))
@@ -193,9 +193,11 @@ def capture(camera):
 
     return capture_uuid
 
+
 def capture_files(capture_uuid):
     CAPTURE_PATH = Path(CAPTURE_FOLDER, str(capture_uuid))
     return [str(x) for x in CAPTURE_PATH.iterdir() if x.is_file()]
+
 
 def capture_to_toot(image_filepath):
     media_ids = mastodon.media_post(image_filepath)
