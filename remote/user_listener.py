@@ -1,4 +1,5 @@
 import os
+from io import BytesIO
 import requests
 from PIL import Image
 from bs4 import BeautifulSoup
@@ -48,10 +49,10 @@ class UserListener(StreamListener):
         capture_filepath = Path(
             CURRENT_PATH, self.config["mastodon_capture_folder"], capture_filename
         )
-        logger.debug(f"Processing {capture_filepath}")
+        self.logging.debug(f"Processing {capture_filepath}")
 
         response_filepath = self.processor.run(status, capture)
-        logger.debug(f"Response {response_filepath}")
+        self.logging.debug(f"Response {response_filepath}")
 
         mastodon_media_id = mastodon.media_post(response_filepath)
 

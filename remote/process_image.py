@@ -50,7 +50,7 @@ class ImageProcessor:
             self.process_config["output_prefix"],
             capture["capture_id"],
             self.process_config["output_suffix"],
-            capture["extension_id"],
+            capture["extension"],
         )
 
         return Path(CURRENT_PATH, self.config["mastodon_capture_folder"], dst_filename)
