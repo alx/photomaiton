@@ -67,7 +67,7 @@ class UserListener(StreamListener):
 
     # called when receiving new post or status update
     def on_update(self, status):
-        self.logging.debug(f"on update received: %s" % (status["id"]))
+        self.logging.debug(f"on update received from user %s" % (status["account"]["id"]))
         try:
             processable_update = (
                 status["account"]["id"] in self.config["mastodon_whitelist_account_ids"]
@@ -99,4 +99,4 @@ class UserListener(StreamListener):
                     self.logging.debug(f"Status has already been replied to")
 
         except Exception as e:
-            self.logging.debug(f"Error: {e}")
+            self.logging.critical(e, exc_info=True)
