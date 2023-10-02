@@ -27,6 +27,7 @@ class UserListener(StreamListener):
 
             if extension in self.config["mastodon_capture_allowed_extensions"]:
                 capture_filename = f"%s.%s" % (media_id, extension)
+                self.logging.debug(f"Downloading %s" % (capture_filename))
                 capture_file = Path(
                     CURRENT_PATH,
                     self.config["mastodon_capture_folder"],
@@ -66,6 +67,7 @@ class UserListener(StreamListener):
 
     # called when receiving new post or status update
     def on_update(self, status):
+        self.logging.debug(f"on update received: %s" % (status["id"]))
         try:
             processable_update = (
                 status["account"]["id"] in self.config["mastodon_whitelist_account_ids"]
