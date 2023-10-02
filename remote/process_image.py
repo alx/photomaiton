@@ -66,38 +66,6 @@ class ImageProcessor:
         return str(dst_path)
 
     def process_gpu(self, status, capture):
-        return self.process_depth(status, capture)
-
-    def process_depth(self, status, capture):
-        src_path = self.src_path(capture)
-        dst_path = self.dst_path(capture)
-
-        device = torch.device("cuda:%i" % self.config["processor"]["gpu_id"])
-
-        zoe_depth = ZoeDetector.from_pretrained(
-            "valhalla/t2iadapter-aux-models",
-            filename="zoed_nk.pth",
-            model_type="zoedepth_nk",
-        ).to(device)
-
-        image = load_image(Image.open(src_path))
-        image = zoe_depth(
-            image, gamma_corrected=True, detect_resolution=512, image_resolution=1024
-        )
-
-        gen_images = pipe(
-            prompt=self.config["processor"]["prompt"],
-            negative_prompt=self.config["processor"]["negative_prompt"],
-            image=image,
-            num_inference_steps=30,
-            adapter_conditioning_scale=1,
-            guidance_scale=7.5,
-        ).images[0]
-
-        gen_images.save(str(dst_path))
-        return str(dst_path)
-
-    def process_t2i_sdxl(self, status, capture):
         src_path = self.src_path(capture)
         dst_path = self.dst_path(capture)
 
