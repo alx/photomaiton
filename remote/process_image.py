@@ -126,24 +126,38 @@ class ImageProcessor:
 
         gen_images.save(str(dst_path))
         return str(dst_path)
+    def create_hash_from_status(self, status):
 
-    def create_hash(self, input_string: str):
-        # Use it with following code:
-        #
-        # status_hash = self.create_hash(status_text(status))
-        # if hasattr(status_hash, "prompt"):
-        #     prompt = status_hash["prompt"]
-        # if hasattr(status_hash, "negative_prompt"):
-        #     negative_prompt = status_hash["negative_prompt"]
+        soup = BeautifulSoup(status["content"], "html.parser")
+        pairs = soup.get_text().split("|")
 
-        pairs = input_string.split("|")
         hash_dict = {}
+
         for pair in pairs:
+
             key_value = pair.strip().split(":")
-            key = key_value[0].strip()
-            try:
-                value = float(key_value[1].strip())
-            except ValueError:
-                value = key_value[1].strip()
+
+            if len(key_value) == 1:
+
+                if key_value[0].startswith("@"):
+                    key = "user"
+                    value = key_value[0].strip()
+
+                else:
+                    key = "prompt"
+                    try:
+                        value = float(key_value[0].strip())
+                    except ValueError:
+                        value = key_value[0].strip()
+
+            elif len(key_value) == 2:
+
+                key = key_value[0].strip()
+                try:
+                    value = float(key_value[1].strip())
+                except ValueError:
+                    value = key_value[1].strip()
+
             hash_dict[key] = value
+
         return hash_dict
