@@ -29,9 +29,15 @@ except ImportError:
 
 
 class ImageProcessor:
-    def __init__(self, config, logging):
+    def __init__(self,
+                 config=None,
+                 logging=None
+                 ):
         self.config = config
-        self.process_config = config["processor"]
+
+        if config is not None:
+            self.process_config = config["processor"]
+
         self.logging = logging
 
     def run(self, status, capture):
