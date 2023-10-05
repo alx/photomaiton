@@ -11,8 +11,8 @@
 	"processor": {
 		"type": "cpu",
 		"gpu_id": 0,
-		"output_prefix": "response_",
-		"output_suffix": "",
+		"output_prefix": "",
+		"output_suffix": "_response",
         "prompt": "photo, portrait, standing, inside a cabin",
         "negative_prompt": ""
 	}
