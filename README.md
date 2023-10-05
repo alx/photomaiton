@@ -1,5 +1,10 @@
 # photomaiton
 
+```bash
+sudo apt install python3.10-venv
+git clone git@github.com:alx/photomaiton.git
+```
+
 ## base
 
 ### connect to base
@@ -7,8 +12,6 @@
 ### run camera code on base
 
 ```bash
-sudo apt install python3.10-venv
-git clone git@github.com:alx/photomaiton.git
 cd photomaiton/base
 python3 -m venv .venv && source .venv/bin/activate
 pip install - r requirements.txt
@@ -17,6 +20,20 @@ python3 main.py
 
 ## remote
 
-### mastodon bot
+### test local
 
-### scaleway deploy
+``` bash
+cd photomaiton/remove
+python3 -m venv .venv && source .venv/bin/activate
+pip install - r requirements.txt
+python3 -m unittest discover tests
+```
+
+### gpu deploy
+
+- sudo sed -i "/#\$nrconf{restart} = 'i';/s/.*/\$nrconf{restart} = 'a';/" /etc/needrestart/needrestart.conf
+- sudo apt update && sudo apt install tmux python3.10-venv libgl1 magic-wormhole -y
+- python3.10 -m venv .venv && source .venv/bin/activate
+- echo ". .venv/bin/activate" >> ~/.bashrc
+- git clone https://github.com/alx/photomaiton.git && cd photomaiton/remote/ && pip install -r requirements_gpu.txt
+- cd photomaiton/remote && mkdir checkpoints && wget -O ./checkpoints/inswapper_128.onnx https://huggingface.co/ashleykleynhans/inswapper/resolve/main/inswapper_128.onnx

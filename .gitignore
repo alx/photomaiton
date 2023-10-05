@@ -9,4 +9,4 @@ remote/config.json
 remote/log.txt
 remote/mastodon/*.jpg
 remote/mastodon/*.png
-remote/tests/
+remote/draft/
