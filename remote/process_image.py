@@ -5,6 +5,10 @@ from pathlib import Path
 import glob
 import json
 import logging
+import cv2
+import re
+from remote import swapper
+from bs4 import BeautifulSoup
 
 CURRENT_PATH = os.path.dirname(os.path.abspath(__file__))
 
@@ -71,11 +75,15 @@ class ImageProcessor:
         inverted_image = PIL.ImageOps.invert(image)
         inverted_image.save(dst_path)
 
-        return str(dst_path)
+        return [{
+            "filepath": str(dst_path),
+            "description": "process_cpu invert_color"
+        }]
 
     def process_gpu(self, status, capture):
+
+        processed_medias = []
         src_path = self.src_path(capture)
-        dst_path = self.dst_path(capture)
 
         device = torch.device("cuda:%i" % self.config["processor"]["gpu_id"])
 
@@ -110,22 +118,57 @@ class ImageProcessor:
             model_type="zoedepth_nk",
         ).to(device)
 
-        image = load_image(str(src_path))
-        image = zoe_depth(
-            image, gamma_corrected=True, detect_resolution=512, image_resolution=1024
+        src_img = load_image(str(src_path))
+        src_img = zoe_depth(
+            src_img,
+            gamma_corrected=True,
+            detect_resolution=512,
+            image_resolution=1024
         )
 
-        gen_images = pipe(
-            prompt=self.config["processor"]["prompt"],
-            negative_prompt=self.config["processor"]["negative_prompt"],
-            image=image,
+        prompt=""
+        negative_prompt=""
+        status_hash = self.create_hash_from_status(status["content"])
+
+        if hasattr(status_hash, "prompt"):
+            prompt = status_hash["prompt"]
+        if hasattr(status_hash, "negative_prompt"):
+            negative_prompt = status_hash["negative_prompt"]
+
+        dst_img = pipe(
+            prompt=promt,
+            negative_prompt=negative_prompt,
+            image=src_img,
             num_inference_steps=30,
             adapter_conditioning_scale=1,
             guidance_scale=7.5,
         ).images[0]
 
-        gen_images.save(str(dst_path))
-        return str(dst_path)
+        dst_path = self.dst_path(capture)
+        dst_img.save(str(dst_path))
+        processed_medias.append({
+            "filepath": dst_path,
+            "description": str(status_hash)
+        })
+
+        status_hash["extra"] = "inswapper_128.onnx"
+        model = "./checkpoints/inswapper_128.onnx"
+        dst_img = swapper.process(
+                [src_img],
+                dst_img,
+                "-1" ,"-1",
+                model
+        )
+
+        dst_path = self.dst_path(capture, "", "_inswapper")
+        dst_img.save(str(dst_path))
+        processed_medias.append({
+            "filepath": dst_path,
+            "description": str(status_hash)
+        })
+
+        return processed_medias
+
     def create_hash_from_status(self, status):
 
         soup = BeautifulSoup(status["content"], "html.parser")

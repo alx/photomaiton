@@ -53,15 +53,21 @@ class UserListener(StreamListener):
         )
         self.logging.debug(f"Processing {capture_filepath}")
 
-        response_filepath = self.processor.run(status, capture)
-        self.logging.debug(f"Response {response_filepath}")
+        processed_medias = self.processor.run(status, capture)
 
-        mastodon_media_id = self.mastodon.media_post(response_filepath)
+        mastodon_media_ids = []
+        for media in processed_medias:
+            mastodon_media_ids.append(
+                self.mastodon.media_post(
+                    media["filepath"],
+                    description = media["description"]
+                )
+            )
 
         self.mastodon.status_post(
             status=self.config["mastodon_capture_reply_text"],
             in_reply_to_id=status["id"],
-            media_ids=mastodon_media_id,
+            media_ids=mastodon_media_ids,
             visibility="direct",
         )
 
