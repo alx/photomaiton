@@ -1,9 +1,12 @@
 # test_app.py
 
 import unittest
+
+import sys
+sys.path.append("..")
 from remote.process_image import ImageProcessor
 
-class TestApp(unittest.TestCase):
+class TestImageProcessor(unittest.TestCase):
 
     def test_create_hash(args):
         obj = ImageProcessor()
