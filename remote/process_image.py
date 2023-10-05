@@ -51,11 +51,13 @@ class ImageProcessor:
 
         return Path(CURRENT_PATH, self.config["mastodon_capture_folder"], src_filename)
 
-    def dst_path(self, capture):
-        dst_filename = f"%s%s%s.%s" % (
+    def dst_path(self, capture, prefix = "", suffix = ""):
+        dst_filename = f"%s%s%s%s%s.%s" % (
             self.process_config["output_prefix"],
+            prefix,
             capture["capture_id"],
             self.process_config["output_suffix"],
+            suffix,
             capture["extension"],
         )
 
