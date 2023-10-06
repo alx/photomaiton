@@ -7,7 +7,7 @@ import json
 import logging
 import cv2
 import re
-from remote import swapper
+import swapper
 from bs4 import BeautifulSoup
 
 CURRENT_PATH = os.path.dirname(os.path.abspath(__file__))
@@ -135,7 +135,7 @@ class ImageProcessor:
         if hasattr(self.config["processor"], "negative_prompt"):
             negative_prompt=self.config["processor"]["negative_prompt"]
 
-        status_hash = self.create_hash_from_status(status["content"])
+        status_hash = self.create_hash_from_status(status)
         if hasattr(status_hash, "prompt"):
             prompt = ", ".join([prompt, status_hash["prompt"]])
         if hasattr(status_hash, "negative_prompt"):
