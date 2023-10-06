@@ -129,17 +129,17 @@ class ImageProcessor:
         prompt = ""
         negative_prompt = ""
 
-        if hasattr(self.config["processor"], "prompt"):
+        if "prompt" in self.config["processor"]:
             prompt=self.config["processor"]["prompt"]
 
-        if hasattr(self.config["processor"], "negative_prompt"):
+        if "negative_prompt" in self.config["processor"]:
             negative_prompt=self.config["processor"]["negative_prompt"]
 
         status_hash = self.create_hash_from_status(status)
-        if hasattr(status_hash, "prompt"):
+        if "prompt" in status_hash:
             prompt = ", ".join([prompt, status_hash["prompt"]])
-        if hasattr(status_hash, "negative_prompt"):
-            negative_prompt = ", ".join([prompt, status_hash["negative_prompt"]])
+        if "negative_prompt" in status_hash:
+            negative_prompt = ", ".join([negative_prompt, status_hash["negative_prompt"]])
 
         dst_img = pipe(
             prompt=prompt,
