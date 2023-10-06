@@ -126,17 +126,23 @@ class ImageProcessor:
             image_resolution=1024
         )
 
-        prompt=""
-        negative_prompt=""
-        status_hash = self.create_hash_from_status(status["content"])
+        prompt = ""
+        negative_prompt = ""
 
+        if hasattr(self.config["processor"], "prompt"):
+            prompt=self.config["processor"]["prompt"]
+
+        if hasattr(self.config["processor"], "negative_prompt"):
+            negative_prompt=self.config["processor"]["negative_prompt"]
+
+        status_hash = self.create_hash_from_status(status["content"])
         if hasattr(status_hash, "prompt"):
-            prompt = status_hash["prompt"]
+            prompt = ", ".join([prompt, status_hash["prompt"]])
         if hasattr(status_hash, "negative_prompt"):
-            negative_prompt = status_hash["negative_prompt"]
+            negative_prompt = ", ".join([prompt, status_hash["negative_prompt"]])
 
         dst_img = pipe(
-            prompt=promt,
+            prompt=prompt,
             negative_prompt=negative_prompt,
             image=src_img,
             num_inference_steps=30,
@@ -151,21 +157,22 @@ class ImageProcessor:
             "description": str(status_hash)
         })
 
-        status_hash["extra"] = "inswapper_128.onnx"
-        model = "./checkpoints/inswapper_128.onnx"
-        dst_img = swapper.process(
-                [src_img],
-                dst_img,
-                "-1" ,"-1",
-                model
-        )
+        if "swap" in status_hash["extra"]:
 
-        dst_path = self.dst_path(capture, "", "_inswapper")
-        dst_img.save(str(dst_path))
-        processed_medias.append({
-            "filepath": dst_path,
-            "description": str(status_hash)
-        })
+            model = "./checkpoints/inswapper_128.onnx"
+            dst_img = swapper.process(
+                    [src_img],
+                    dst_img,
+                    "-1" ,"-1",
+                    model
+            )
+
+            dst_path = self.dst_path(capture, "", "_inswapper")
+            dst_img.save(str(dst_path))
+            processed_medias.append({
+                "filepath": dst_path,
+                "description": str(status_hash)
+            })
 
         return processed_medias
 
@@ -195,7 +202,7 @@ class ImageProcessor:
 
             elif len(key_value) == 2:
 
-                key = key_value[0].strip()
+                key = key_value[0].strip().replace(" ", "_")
                 try:
                     value = float(key_value[1].strip())
                 except ValueError:
