@@ -158,7 +158,6 @@ class ImageProcessor:
         })
 
         if "swap" in status_hash["extra"]:
-
             model = "./checkpoints/inswapper_128.onnx"
             dst_img = swapper.process(
                     [src_img],
@@ -171,7 +170,13 @@ class ImageProcessor:
             dst_img.save(str(dst_path))
             processed_medias.append({
                 "filepath": dst_path,
-                "description": str(status_hash)
+                "description": ""
+            })
+
+        if "keep_original" in status_hash["extra"]:
+            processed_medias.append({
+                "filepath": src_path,
+                "description": ""
             })
 
         return processed_medias
