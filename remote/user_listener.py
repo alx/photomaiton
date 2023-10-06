@@ -76,7 +76,7 @@ class UserListener(StreamListener):
         self.logging.debug(f"on update received from user %s" % (status["account"]["id"]))
         try:
             processable_update = (
-                status["account"]["id"] in self.config["mastodon_whitelist_account_ids"]
+                str(status["account"]["id"]) in self.config["mastodon_whitelist_account_ids"]
                 and status["in_reply_to_id"] is None
                 and status["replies_count"] == 0
             )
@@ -91,7 +91,7 @@ class UserListener(StreamListener):
                 self.logging.debug("Update not processable")
 
                 if (
-                    status["account"]["id"]
+                    str(status["account"]["id"])
                     not in self.config["mastodon_whitelist_account_ids"]
                 ):
                     self.logging.debug(
