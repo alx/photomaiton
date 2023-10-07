@@ -48,6 +48,39 @@ class ImageProcessor:
 
         self.logging = logging
 
+        device = torch.device("cuda:%i" % self.config["processor"]["gpu_id"])
+
+        # load adapter
+        adapter = T2IAdapter.from_pretrained(
+            "TencentARC/t2i-adapter-depth-zoe-sdxl-1.0",
+            torch_dtype=torch.float16,
+            varient="fp16",
+        ).to(device)
+
+        # load euler_a scheduler
+        model_id = "stabilityai/stable-diffusion-xl-base-1.0"
+        euler_a = EulerAncestralDiscreteScheduler.from_pretrained(
+            model_id, subfolder="scheduler"
+        )
+        vae = AutoencoderKL.from_pretrained(
+            "madebyollin/sdxl-vae-fp16-fix", torch_dtype=torch.float16
+        )
+        self.pipe = StableDiffusionXLAdapterPipeline.from_pretrained(
+            model_id,
+            vae=vae,
+            adapter=adapter,
+            scheduler=euler_a,
+            torch_dtype=torch.float16,
+            variant="fp16",
+        ).to(device)
+        self.pipe.enable_xformers_memory_efficient_attention()
+
+        self.zoe_depth = ZoeDetector.from_pretrained(
+            "valhalla/t2iadapter-aux-models",
+            filename="zoed_nk.pth",
+            model_type="zoedepth_nk",
+        ).to(device)
+
         self.face_analyser = FaceAnalysis(name='buffalo_l')
         self.face_analyser.prepare(ctx_id=0)
 
@@ -134,41 +167,8 @@ class ImageProcessor:
         processed_medias = []
         src_path = self.src_path(capture)
 
-        device = torch.device("cuda:%i" % self.config["processor"]["gpu_id"])
-
-        # load adapter
-        adapter = T2IAdapter.from_pretrained(
-            "TencentARC/t2i-adapter-depth-zoe-sdxl-1.0",
-            torch_dtype=torch.float16,
-            varient="fp16",
-        ).to(device)
-
-        # load euler_a scheduler
-        model_id = "stabilityai/stable-diffusion-xl-base-1.0"
-        euler_a = EulerAncestralDiscreteScheduler.from_pretrained(
-            model_id, subfolder="scheduler"
-        )
-        vae = AutoencoderKL.from_pretrained(
-            "madebyollin/sdxl-vae-fp16-fix", torch_dtype=torch.float16
-        )
-        pipe = StableDiffusionXLAdapterPipeline.from_pretrained(
-            model_id,
-            vae=vae,
-            adapter=adapter,
-            scheduler=euler_a,
-            torch_dtype=torch.float16,
-            variant="fp16",
-        ).to(device)
-        pipe.enable_xformers_memory_efficient_attention()
-
-        zoe_depth = ZoeDetector.from_pretrained(
-            "valhalla/t2iadapter-aux-models",
-            filename="zoed_nk.pth",
-            model_type="zoedepth_nk",
-        ).to(device)
-
         src_img = load_image(str(src_path))
-        src_img = zoe_depth(
+        src_img = self.zoe_depth(
             src_img,
             gamma_corrected=True,
             detect_resolution=512,
@@ -190,7 +190,7 @@ class ImageProcessor:
         if "negative_prompt" in status_hash:
             negative_prompt = ", ".join([negative_prompt, status_hash["negative_prompt"]])
 
-        dst_img = pipe(
+        dst_img = self.pipe(
             prompt=prompt,
             negative_prompt=negative_prompt,
             image=src_img,
@@ -206,7 +206,8 @@ class ImageProcessor:
             "description": str(status_hash)
         })
 
-        if "swap" in status_hash["extra"]:
+        #if "swap" in status_hash["extra"]:
+        if True:
 
             frame = self.face_swap(
                 source=src_path,
