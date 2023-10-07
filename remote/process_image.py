@@ -145,7 +145,7 @@ class ImageProcessor:
 
         frame = cv2.imread(str(target))
         for source_face, target_face in zip(source_faces, target_faces):
-            frame = self.swapper.get(target_frame, target_face, source_face, paste_back=True)
+            frame = self.swapper.get(frame, target_face, source_face, paste_back=True)
 
         return frame
 
@@ -190,6 +190,10 @@ class ImageProcessor:
         if "negative_prompt" in status_hash:
             negative_prompt = ", ".join([negative_prompt, status_hash["negative_prompt"]])
 
+        source_faces = self.face_analyser.get(cv2.imread(str(source)))
+        face_prompt = self.face_to_prompt(source_faces)
+        prompt = ", ".join([prompt, face_prompt])
+
         dst_img = self.pipe(
             prompt=prompt,
             negative_prompt=negative_prompt,
@@ -203,7 +207,7 @@ class ImageProcessor:
         dst_img.save(str(dst_path))
         processed_medias.append({
             "filepath": dst_path,
-            "description": str(status_hash)
+            "description": f"%s | (--) %s" % (prompt, negative_prompt)
         })
 
         #if "swap" in status_hash["extra"]:
@@ -227,7 +231,7 @@ class ImageProcessor:
 
             processed_medias.append({
                 "filepath": src_path,
-                "description": ""
+                "description": str(status_hash)
             })
 
         return processed_medias
