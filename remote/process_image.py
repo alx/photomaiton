@@ -102,6 +102,20 @@ class ImageProcessor:
 
         return ", ".join(prompt)
 
+    def face_swap(self, source, target):
+
+        try:
+            source_faces = self.face_analyser.get(cv2.imread(str(source)))
+            target_faces = self.face_analyser.get(cv2.imread(str(target)))
+        except ValueError:
+            pass
+
+        frame = cv2.imread(str(target))
+        for source_face, target_face in zip(source_faces, target_faces):
+            frame = self.swapper.get(target_frame, target_face, source_face, paste_back=True)
+
+        return frame
+
     def process_cpu(self, status, capture):
         src_path = self.src_path(capture)
         dst_path = self.dst_path(capture)
@@ -194,18 +208,14 @@ class ImageProcessor:
 
         if "swap" in status_hash["extra"]:
 
-            try:
-                source_faces = self.face_analyser.get(cv2.imread(str(src_path)))
-                target_faces = self.face_analyser.get(cv2.imread(str(dst_path)))
-            except ValueError:
-                pass
-
-            target_frame = cv2.imread(str(dst_path))
-            for source_face, target_face in zip(source_faces, target_faces):
-                target_frame = self.swapper.get(target_frame, target_face, source_face, paste_back=True)
+            frame = self.face_swap(
+                source=src_path,
+                target=dst_path
+            )
 
             dst_path = self.dst_path(capture, "", "_inswapper")
-            cv2.imwrite(str(dst_path), target_frame)
+            cv2.imwrite(str(dst_path), frame)
+
             processed_medias.append({
                 "filepath": dst_path,
                 "description": ""
