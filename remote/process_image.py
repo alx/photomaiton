@@ -109,7 +109,7 @@ class ImageProcessor:
 
         return Path(CURRENT_PATH, self.config["mastodon_capture_folder"], dst_filename)
 
-    def face_to_prompt(faces):
+    def face_to_prompt(self, faces):
 
         if len(faces) == 0:
             return ""
@@ -190,7 +190,7 @@ class ImageProcessor:
         if "negative_prompt" in status_hash:
             negative_prompt = ", ".join([negative_prompt, status_hash["negative_prompt"]])
 
-        source_faces = self.face_analyser.get(cv2.imread(str(source)))
+        source_faces = self.face_analyser.get(cv2.imread(str(src_path)))
         face_prompt = self.face_to_prompt(source_faces)
         prompt = ", ".join([prompt, face_prompt])
 
