@@ -11,6 +11,7 @@ import swapper
 from bs4 import BeautifulSoup
 import insightface
 from insightface.app import FaceAnalysis
+from collections import Counter
 
 CURRENT_PATH = os.path.dirname(os.path.abspath(__file__))
 
