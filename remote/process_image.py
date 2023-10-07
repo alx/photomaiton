@@ -9,6 +9,8 @@ import cv2
 import re
 import swapper
 from bs4 import BeautifulSoup
+import insightface
+from insightface.app import FaceAnalysis
 
 CURRENT_PATH = os.path.dirname(os.path.abspath(__file__))
 
@@ -35,7 +37,8 @@ except ImportError:
 class ImageProcessor:
     def __init__(self,
                  config=None,
-                 logging=None
+                 logging=None,
+                 swapper_model = "./checkpoints/inswapper_128.onnx"
                  ):
         self.config = config
 
@@ -43,6 +46,11 @@ class ImageProcessor:
             self.process_config = config["processor"]
 
         self.logging = logging
+
+        self.face_analyser = FaceAnalysis(name='buffalo_l')
+        self.face_analyser.prepare(ctx_id=0)
+
+        self.swapper = insightface.model_zoo.get_model(swapper_model)
 
     def run(self, status, capture):
         if self.config["processor"]["type"] == "cpu":
@@ -158,16 +166,19 @@ class ImageProcessor:
         })
 
         if "swap" in status_hash["extra"]:
-            model = "./checkpoints/inswapper_128.onnx"
-            dst_img = swapper.process(
-                    [src_img],
-                    dst_img,
-                    "-1" ,"-1",
-                    model
-            )
+
+            try:
+                source_faces = self.face_analyser.get(cv2.imread(str(src_path)))
+                target_faces = self.face_analyser.get(cv2.imread(str(dst_path)))
+            except ValueError:
+                pass
+
+            target_frame = cv2.imread(str(dst_path))
+            for source_face, target_face in zip(source_faces, target_faces):
+                target_frame = self.swapper.get(target_frame, target_face, source_face, paste_back=True)
 
             dst_path = self.dst_path(capture, "", "_inswapper")
-            dst_img.save(str(dst_path))
+            cv2.imwrite(str(dst_path), target_frame)
             processed_medias.append({
                 "filepath": dst_path,
                 "description": ""
