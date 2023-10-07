@@ -221,7 +221,9 @@ class ImageProcessor:
                 "description": ""
             })
 
-        if "keep_original" in status_hash["extra"]:
+        #if "keep_original" in status_hash["extra"]:
+        if True:
+
             processed_medias.append({
                 "filepath": src_path,
                 "description": ""
