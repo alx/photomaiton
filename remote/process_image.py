@@ -75,6 +75,32 @@ class ImageProcessor:
 
         return Path(CURRENT_PATH, self.config["mastodon_capture_folder"], dst_filename)
 
+    def face_to_prompt(faces):
+
+        if len(faces) == 0:
+            return ""
+
+        prompt = []
+        ages = [face['age'] for face in faces]
+        genders = ["woman" if face['gender'] == 0 else "man" for face in faces]
+        count_gender = dict(Counter(genders).items())
+
+        if len(faces) == 1:
+            prompt.append(f"%s years old" % (ages[0]))
+            prompt.append(f"a %s" % (genders[0]))
+        else:
+            prompt.append(", ".join([f"%s years old" % (age) for age in ages]))
+            for gender in count_gender:
+                if count_gender[gender] == 1:
+                    prompt.append(f"a %s" % (gender))
+                else:
+                    prompt.append(f"%i %s" % (
+                        count_gender[gender],
+                        gender.replace("man", "men")
+                    ))
+
+        return ", ".join(prompt)
+
     def process_cpu(self, status, capture):
         src_path = self.src_path(capture)
         dst_path = self.dst_path(capture)
