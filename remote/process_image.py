@@ -190,9 +190,13 @@ class ImageProcessor:
         if "negative_prompt" in status_hash:
             negative_prompt = ", ".join([negative_prompt, status_hash["negative_prompt"]])
 
-        source_faces = self.face_analyser.get(cv2.imread(str(src_path)))
-        face_prompt = self.face_to_prompt(source_faces)
-        prompt = ", ".join([prompt, face_prompt])
+        if "face_to_prompt" in [
+                *self.process_config["extras"],
+                *status_hash["extras"]
+                ]:
+            source_faces = self.face_analyser.get(cv2.imread(str(src_path)))
+            face_prompt = self.face_to_prompt(source_faces)
+            prompt = ", ".join([prompt, face_prompt])
 
         dst_img = self.pipe(
             prompt=prompt,
@@ -210,8 +214,10 @@ class ImageProcessor:
             "description": f"%s | (--) %s" % (prompt, negative_prompt)
         })
 
-        #if "swap" in status_hash["extra"]:
-        if True:
+        if "swap_faces" in [
+                *self.process_config["extras"],
+                *status_hash["extras"]
+                ]:
 
             frame = self.face_swap(
                 source=src_path,
@@ -227,7 +233,10 @@ class ImageProcessor:
             })
 
         #if "keep_original" in status_hash["extra"]:
-        if True:
+        if "keep_original" in [
+                *self.process_config["extras"],
+                *status_hash["extras"]
+                ]:
 
             processed_medias.append({
                 "filepath": src_path,

@@ -14,6 +14,11 @@
 		"output_prefix": "",
 		"output_suffix": "_response",
         "prompt": "photo, portrait, standing, inside a cabin",
-        "negative_prompt": ""
+        "negative_prompt": "",
+		"extras": [
+				  "face_to_prompt",
+				  "swap_faces",
+				  "keep_original"
+				  ]
 	}
 }
