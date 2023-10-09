@@ -15,10 +15,15 @@
 		"output_suffix": "_response",
         "prompt": "photo, portrait, standing, inside a cabin",
         "negative_prompt": "",
+		"controlnet": {
+		    "image": "./controlnet.png",
+		    "num_inference_steps": 50,
+		    "guidance_scale": 7.5
+		},
 		"extras": [
-				  "face_to_prompt",
-				  "swap_faces",
-				  "keep_original"
-				  ]
+			"face_to_prompt",
+			"swap_faces",
+			"keep_original"
+		]
 	}
 }

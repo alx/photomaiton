@@ -18,9 +18,12 @@ CURRENT_PATH = os.path.dirname(os.path.abspath(__file__))
 try:
     from diffusers import (
         StableDiffusionXLAdapterPipeline,
+        StableDiffusionControlNetImg2ImgPipeline,
         T2IAdapter,
         EulerAncestralDiscreteScheduler,
         AutoencoderKL,
+        ControlNetModel,
+        UniPCMultistepScheduler,
     )
     from diffusers.utils import load_image, make_image_grid
     from controlnet_aux import OpenposeDetector, ZoeDetector, LineartDetector
@@ -60,10 +63,12 @@ class ImageProcessor:
         # load euler_a scheduler
         model_id = "stabilityai/stable-diffusion-xl-base-1.0"
         euler_a = EulerAncestralDiscreteScheduler.from_pretrained(
-            model_id, subfolder="scheduler"
+            model_id,
+            subfolder="scheduler"
         )
         vae = AutoencoderKL.from_pretrained(
-            "madebyollin/sdxl-vae-fp16-fix", torch_dtype=torch.float16
+            "madebyollin/sdxl-vae-fp16-fix",
+            torch_dtype=torch.float16
         )
         self.pipe = StableDiffusionXLAdapterPipeline.from_pretrained(
             model_id,
@@ -80,6 +85,26 @@ class ImageProcessor:
             filename="zoed_nk.pth",
             model_type="zoedepth_nk",
         ).to(device)
+
+        StableDiffusionControlNetImg2ImgPipeline
+
+        # load control net and stable diffusion v1-5
+        controlnet = ControlNetModel.from_pretrained(
+            "monster-labs/control_v1p_sd15_qrcode_monster",
+            torch_dtype=torch.float16
+        )
+
+        self.controlnet_pipe = StableDiffusionControlNetImg2ImgPipeline.from_pretrained(
+            "runwayml/stable-diffusion-v1-5",
+            controlnet=controlnet,
+            torch_dtype=torch.float16
+        )
+
+        # speed up diffusion process with faster scheduler and memory optimization
+        self.controlnet_pipe.scheduler = UniPCMultistepScheduler.from_config(
+            self.controlnet_pipe.scheduler.config
+        )
+        self.controlnet_pipe.enable_model_cpu_offload()
 
         self.face_analyser = FaceAnalysis(name='buffalo_l')
         self.face_analyser.prepare(ctx_id=0)
@@ -226,7 +251,38 @@ class ImageProcessor:
                 "description": ""
             })
 
-        #if "keep_original" in status_hash["extra"]:
+        if "controlnet" in self.process_config:
+
+            controlnet_config = self.process_config["controlnet"]
+
+            src_img = load_image(str(dst_path))
+            control_img = load_image(controlnet_config["image"])
+
+            num_inference_steps = 50
+            if "num_inference_steps" in controlnet_config:
+                num_inference_steps = controlnet_config["num_inference_steps"]
+
+            guidance_scale = 7.5
+            if "guidance_scale" in controlnet_config:
+                guidance_scale = controlnet_config["guidance_scale"]
+
+            generator = torch.manual_seed(0)
+            image = self.controlnet_pipe(
+                prompt,
+                num_inference_steps=num_inference_steps,
+                guidance_scale=guidance_scale,
+                generator=generator,
+                image=src_img,
+                control_image=control_img,
+            ).images[0]
+
+            dst_path = self.dst_path(capture, "", "_controlnet")
+            dst_img.save(str(dst_path))
+            processed_medias.append({
+                "filepath": dst_path,
+                "description": "controlnet"
+            })
+
         if "keep_original" in self.process_config["extras"]:
 
             processed_medias.append({
