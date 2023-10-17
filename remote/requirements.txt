@@ -47,5 +47,5 @@ threadpoolctl==3.2.0
 tifffile==2023.9.26
 tqdm==4.66.1
 typing_extensions==4.8.0
-urllib3==2.0.6
+urllib3==2.0.7
 wcwidth==0.2.8
