@@ -46,7 +46,10 @@ class UserListener(StreamListener):
 
         return captured_media
 
-    def process_status(self, status, capture):
+    def process_notification(self, notification, capture):
+
+        status = notification["status"]
+        
         capture_filename = f"%s.%s" % (capture["capture_id"], capture["extension"])
         capture_filepath = Path(
             CURRENT_PATH, self.config["mastodon_capture_folder"], capture_filename
@@ -65,18 +68,21 @@ class UserListener(StreamListener):
             )
 
         self.mastodon.status_post(
-            status=self.config["mastodon_capture_reply_text"],
+            status=f"%s - @%s" % (self.config["mastodon_capture_reply_text"], notification["account"]["acct"]),
             in_reply_to_id=status["id"],
             media_ids=mastodon_media_ids,
             visibility="direct",
         )
 
     # called when receiving new post or status update
-    def on_update(self, status):
-        self.logging.debug(f"on update received from user %s" % (status["account"]["id"]))
+    def on_notification(self, notification):
+
+        self.logging.debug(f"on update received from user %s" % (notification["account"]["acct"]))
+        status = notification["status"]
+
         try:
             processable_update = (
-                str(status["account"]["id"]) in self.config["mastodon_whitelist_account_ids"]
+                str(notification["account"]["acct"]) in self.config["mastodon_whitelist_acct"]
                 and status["in_reply_to_id"] is None
                 and status["replies_count"] == 0
             )
@@ -85,7 +91,7 @@ class UserListener(StreamListener):
                 capture_media_ids = self.download_media(status)
 
                 for capture_id in capture_media_ids:
-                    self.process_status(status, capture_id)
+                    self.process_notification(notification, capture_id)
 
             else:
                 self.logging.debug("Update not processable")
