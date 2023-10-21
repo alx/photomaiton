@@ -1,4 +1,5 @@
 {
+	"alert_user": "alx@mastodon.tetaneutral.net",
 	"log_filename": "log.txt",
 	"mastodon_base_url": "https://mastodon.tetaneutral.net",
 	"mastodon_access_token": "Find token here -> https://mastodon.tetaneutral.net/settings/applications"

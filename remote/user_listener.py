@@ -17,6 +17,12 @@ class UserListener(StreamListener):
         self.logging = logging
         self.processor = ImageProcessor(config, logging)
 
+        if self.config["alert_user"]:
+            self.mastodon.status_post(
+                status=f"user_listener ready - @%s" % (self.config["alert_user"]),
+                visibility="direct",
+            )
+
     def download_media(self, status):
         captured_media = []
         attachments = status["media_attachments"]
