@@ -35,7 +35,7 @@ Fasttrack:
 
 ``` bash
 git clone https://github.com/alx/photomaiton.git
-./photomaiton/remote/deploy_gpu.sh
+./photomaiton/remote/deploy/mastodon_bot.sh
 ```
 
 Manual:
