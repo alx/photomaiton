@@ -8,7 +8,7 @@ sudo apt install tmux python3.10-venv libgl1 magic-wormhole -y
 
 python3.10 -m venv .venv && source .venv/bin/activate
 . .venv/bin/activate
-echo ". .venv/bin/activate" >> ~/.bashrc
+echo ". /home/user/.venv/bin/activate" >> ~/.bashrc
 
 cd $HOME/photomaiton/remote/
 pip install -r requirements_gpu.txt
