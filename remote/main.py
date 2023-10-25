@@ -49,8 +49,8 @@ def stream_from_server():
             logging.debug("Start listening to stream")
             mastodon.stream_user(UserListener(config, mastodon, logging))
         except Exception as e:
-            logging.debug(f"Error in stream_public: {e}. Restarting...")
-
+            logging.debug(f"Error in stream_public: {e}")
+            exit(1)
 
 try:
     with ThreadPoolExecutor() as executor:
