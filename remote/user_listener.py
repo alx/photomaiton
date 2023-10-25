@@ -103,8 +103,8 @@ class UserListener(StreamListener):
                 self.logging.debug("Update not processable")
 
                 if (
-                    str(status["account"]["id"])
-                    not in self.config["mastodon_whitelist_account_ids"]
+                    str(notification["account"]["acct"])
+                    not in self.config["mastodon_whitelist_acct"]
                 ):
                     self.logging.debug(
                         f"Account id %s is not whitelisted" % (status["account"]["id"])
