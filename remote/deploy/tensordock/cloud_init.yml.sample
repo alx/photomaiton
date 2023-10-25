@@ -1,0 +1,8 @@
+write_files:
+  - encoding: b64
+    path: /home/user/cloud_init.sh
+    permissions: '0644'
+    content: Z2l0IGNsb25lIGdpdEBnaXRodWIuY29tOmFseC9waG90b21haXRvbi5naXQKLi9waG90b21haXRvbi9yZW1vdGUvZGVwbG95L21hc3RvZG9uX2JvdC5zaAo=
+    owner: user:user
+runcmd:
+  - bash /home/user/cloud_init.sh

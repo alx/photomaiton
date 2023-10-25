@@ -1,0 +1,8 @@
+{
+  "log_filename": "log.txt",
+  "tensordock": {
+    "api_url": "https://marketplace.tensordock.com",
+    "api_key": "API_KEY",
+    "api_token": "API_TOKEN"
+  }
+}

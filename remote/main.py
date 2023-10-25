@@ -3,6 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 import os
 import json
 import logging
+import argparse
 from mastodon import Mastodon
 from pathlib import Path
 
@@ -10,7 +11,18 @@ from user_listener import UserListener
 
 CURRENT_PATH = os.path.dirname(os.path.abspath(__file__))
 
-with open(Path(CURRENT_PATH, "config.json"), "r") as f:
+parser = argparse.ArgumentParser(description="Read config file path")
+parser.add_argument("--config", type=str, help="Path to the configuration file")
+args = parser.parse_args()
+
+if args.config:
+    config_path = os.path.abspath(args.config)
+    print(f"Config file path: {config_path}")
+else:
+    config_path = Path(CURRENT_PATH, "config.json")
+    print("No configuration file provided. Use --config [path_to_config_file] to specify one.")
+
+with open(config_path, "r") as f:
     config = json.load(f)
 
 LOG_FILENAME = Path(CURRENT_PATH, config["log_filename"])
