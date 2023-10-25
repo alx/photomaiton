@@ -54,31 +54,31 @@ class ImageProcessor:
         device = torch.device("cuda:%i" % self.config["processor"]["gpu_id"])
 
         # load adapter
-        adapter = T2IAdapter.from_pretrained(
-            "TencentARC/t2i-adapter-depth-zoe-sdxl-1.0",
-            torch_dtype=torch.float16,
-            varient="fp16",
-        ).to(device)
+        # adapter = T2IAdapter.from_pretrained(
+        #     "TencentARC/t2i-adapter-depth-zoe-sdxl-1.0",
+        #     torch_dtype=torch.float16,
+        #     varient="fp16",
+        # ).to(device)
 
-        # load euler_a scheduler
-        model_id = "stabilityai/stable-diffusion-xl-base-1.0"
-        euler_a = EulerAncestralDiscreteScheduler.from_pretrained(
-            model_id,
-            subfolder="scheduler"
-        )
-        vae = AutoencoderKL.from_pretrained(
-            "madebyollin/sdxl-vae-fp16-fix",
-            torch_dtype=torch.float16
-        )
-        self.pipe = StableDiffusionXLAdapterPipeline.from_pretrained(
-            model_id,
-            vae=vae,
-            adapter=adapter,
-            scheduler=euler_a,
-            torch_dtype=torch.float16,
-            variant="fp16",
-        ).to(device)
-        self.pipe.enable_xformers_memory_efficient_attention()
+        # # load euler_a scheduler
+        # model_id = "segmind/SSD-1B"
+        # euler_a = EulerAncestralDiscreteScheduler.from_pretrained(
+        #     model_id,
+        #     subfolder="scheduler"
+        # )
+        # vae = AutoencoderKL.from_pretrained(
+        #     "madebyollin/sdxl-vae-fp16-fix",
+        #     torch_dtype=torch.float16
+        # )
+        # self.pipe = StableDiffusionXLAdapterPipeline.from_pretrained(
+        #     model_id,
+        #     vae=vae,
+        #     adapter=adapter,
+        #     scheduler=euler_a,
+        #     torch_dtype=torch.float16,
+        #     variant="fp16",
+        # ).to(device)
+        # self.pipe.enable_xformers_memory_efficient_attention()
 
         self.zoe_depth = ZoeDetector.from_pretrained(
             "valhalla/t2iadapter-aux-models",
@@ -105,6 +105,24 @@ class ImageProcessor:
             self.controlnet_pipe.scheduler.config
         )
         self.controlnet_pipe.enable_model_cpu_offload()
+
+        pipe_id = "stabilityai/stable-diffusion-xl-base-1.0"
+        pipe_id = "segmind/SSD-1B"
+        self.pipe = DiffusionPipeline.from_pretrained(
+            pipe_id,
+            torch_dtype=torch.float16).to(device)
+
+        self.pipe.load_lora_weights(
+            "CiroN2022/toy-face",
+            weight_name="toy_face_sdxl.safetensors",
+            adapter_name="toy"
+        )
+        self.pipe.load_lora_weights(
+            "nerijs/pixel-art-xl",
+            weight_name="pixel-art-xl.safetensors",
+            adapter_name="pixel"
+        )
+        self.pipe.set_adapters("pixel")
 
         self.face_analyser = FaceAnalysis(name='buffalo_l')
         self.face_analyser.prepare(ctx_id=0)
