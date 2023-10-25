@@ -147,6 +147,36 @@ def deploy_machine(host):
 
     return success
 
+def info_deploys():
+
+    url_path = "/api/v0/client/list"
+    response = requests.request(
+        "POST",
+        config["tensordock"]["api_url"] + url_path,
+        data = {
+            'api_key': config["tensordock"]["api_key"],
+            'api_token': config["tensordock"]["api_token"]
+        }
+    )
+    sleep(1)
+    response = json.loads(response.text)
+
+    for server_uuid in response["virtualmachines"]:
+
+        url_path = "/api/v0/client/get/single"
+        response = requests.request(
+            "POST",
+            config["tensordock"]["api_url"] + url_path,
+            data = {
+                'api_key': config["tensordock"]["api_key"],
+                'api_token': config["tensordock"]["api_token"],
+                'server': server_uuid
+            }
+        )
+        response = json.loads(response.text)
+        logging.debug(response)
+        sleep(1)
+
 def delete_deploys():
 
     url_path = "/api/v0/client/list"
@@ -183,13 +213,16 @@ def deploy_node():
         host = hosts["hostnodes"][key]
         if is_host_eligible(host):
             host["id"] = key
-            deploy_machine(host)
-            break
+            success = deploy_machine(host)
+            if success:
+                break
 
 if is_api_available():
 
     if "--delete" in sys.argv:
         delete_deploys()
+    elif "--info" in sys.argv:
+        info_deploys()
     else:
         deploy_node()
 
