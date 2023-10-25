@@ -93,13 +93,30 @@ class UserListener(StreamListener):
         status = notification["status"]
 
         try:
+
             processable_update = (
-                str(notification["account"]["acct"]) in self.config["mastodon_whitelist_acct"]
-                and status["in_reply_to_id"] is None
+                status["in_reply_to_id"] is None
                 and status["replies_count"] == 0
             )
 
             if processable_update:
+
+                if "mastodon_whitelist_acct" in self.config:
+                    processable_update = (
+                        processable_update
+                        and str(notification["account"]["acct"]) in self.config["mastodon_whitelist_acct"]
+                    )
+
+                if "mastodon_whitelist_followers" in self.config:
+                    # use mastodon.py to get followers
+                    followers = []
+                    processable_update = (
+                        processable_update
+                        and str(notification["account"]["acct"]) in followers
+                    )
+
+            if processable_update:
+
                 capture_media_ids = self.download_media(status)
 
                 for capture_id in capture_media_ids:
