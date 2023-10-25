@@ -36,9 +36,7 @@ void refreshCountdown()
   if(currentMillis - prevousMillisCountdown >= 1000){
     prevousMillisCountdown = currentMillis;
     countDown = countDown > 0 ? countDown-1 : 0;
-    //Serial.println(countDown);
     displayNumber(countDown);
-    Serial.println("refresh");
   }
 }
 

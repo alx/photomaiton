@@ -50,9 +50,6 @@ void setup() {
   //Init strip
   strip.begin();
   strip.setBrightness(100);
-  for(byte i=0; i<strip.numPixels(); i++) {
-    strip.setPixelColor(i, !bClassic ? 255 : 0, 0, bClassic ? 255 : 0);
-  }
   strip.show();
   
   EEPROM.readBlock(EEPROM_ADRESS, parametres);
@@ -81,7 +78,7 @@ void setup() {
 }
 
 void loop() {
-  // TODO: Lecture bouton activation -> couleurs led
+  // Blue or red pill
   if(bClassic != digitalRead(SELECTOR_PIN)){
     bClassic = !bClassic;
     for(byte i=0; i<strip.numPixels(); i++) {
@@ -89,7 +86,6 @@ void loop() {
     }
     strip.show();
   }
-  
 
   // If coin acceptor OK and clic start button.
   if(manageCoinsAndStart(parametres.mode)) {
@@ -97,13 +93,13 @@ void loop() {
     parametres.bRunning = true;
     EEPROM.updateBlock(EEPROM_ADRESS, parametres);*/
     #ifdef JSON
-      //startShot(bClassic);
+      startShot(bClassic);
     #else
       digitalWrite(NUMERIC_PIN, HIGH); // start raspberry pi sequence
       delay(100);
       digitalWrite(NUMERIC_PIN, LOW);
     #endif
-    Serial.println("countdown");
+
     for(byte i = 0; i < 4;i++){
       showCountdown();
       while(getCountDown() > 0){
