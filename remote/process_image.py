@@ -220,13 +220,33 @@ class ImageProcessor:
             face_prompt = self.face_to_prompt(source_faces)
             prompt = ", ".join([prompt, face_prompt])
 
+        config_num_inference_steps = 30
+        config_adapter_conditioning_scale = 1
+        config_guidance_scale = 7.5
+        config_lora_scale = 0.9
+
+        if "pipe_params" in self.process_config:
+            pipe_params = self.process_config["pipe_params"]
+            if "num_inference_steps" in pipe_params:
+                config_num_inference_steps = pipe_params["num_inference_steps"]
+
+            if "adapter_conditioning_scale" in pipe_params:
+                config_adapter_conditioning_scale = pipe_params["adapter_conditioning_scale"]
+
+            if "guidance_scale" in pipe_params:
+                config_guidance_scale = pipe_params["guidance_scale"]
+
+            if "lora_scale" in pipe_params:
+                config_lora_scale = pipe_params["lora_scale"]
+
         dst_img = self.pipe(
             prompt=prompt,
             negative_prompt=negative_prompt,
             image=src_img,
-            num_inference_steps=30,
-            adapter_conditioning_scale=1,
-            guidance_scale=7.5,
+            num_inference_steps=config_num_inference_steps,
+            adapter_conditioning_scale=config_adapter_conditioning_scale,
+            guidance_scale=config_guidance_scale,
+            cross_attention_kwargs={"scale": config_lora_scale},
         ).images[0]
 
         dst_path = self.dst_path(capture)
