@@ -24,6 +24,7 @@ try:
         AutoencoderKL,
         ControlNetModel,
         UniPCMultistepScheduler,
+        DiffusionPipeline,
     )
     from diffusers.utils import load_image, make_image_grid
     from controlnet_aux import OpenposeDetector, ZoeDetector, LineartDetector
@@ -107,10 +108,10 @@ class ImageProcessor:
         self.controlnet_pipe.enable_model_cpu_offload()
 
         pipe_id = "stabilityai/stable-diffusion-xl-base-1.0"
-        pipe_id = "segmind/SSD-1B"
         self.pipe = DiffusionPipeline.from_pretrained(
             pipe_id,
-            torch_dtype=torch.float16).to(device)
+            torch_dtype=torch.float16
+        ).to(device)
 
         self.pipe.load_lora_weights(
             "CiroN2022/toy-face",
