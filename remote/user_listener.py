@@ -73,8 +73,14 @@ class UserListener(StreamListener):
                 )
             )
 
+        reply_text = f"@%s / %s %s" % (
+            notification["account"]["acct"],
+            self.config["mastodon_capture_reply_text"],
+            processed_medias[0]["description"]
+        )
+
         self.mastodon.status_post(
-            status=f"%s - @%s" % (self.config["mastodon_capture_reply_text"], notification["account"]["acct"]),
+            status=reply_text,
             in_reply_to_id=status["id"],
             media_ids=mastodon_media_ids,
             visibility="direct",
