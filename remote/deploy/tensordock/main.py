@@ -86,14 +86,13 @@ def deploy_machine(host):
         'internal_ports': str(set(config["host_config"]["internal_ports"])),
         'hostnode': host["id"],
         'storage': config["host_config"]["hdd"],
-        'operating_system': config["host_config"]["os"],
-        'cloud_init': r'{}'.format(cloud_init)
+        'operating_system': config["host_config"]["os"]
     }
 
-    if "cloud_init_file" in config["host_config"] and \
-        os.path.isfile(config["host_config"]["cloud_init_file"]):
-        with open(config["host_config"]["cloud_init_file"], 'r') as f:
-            payload["cloud_init"] = f.read().replace('\n', r'\n')
+    if "cloudinit_file" in config["host_config"] and \
+        os.path.isfile(config["host_config"]["cloudinit_file"]):
+        with open(config["host_config"]["cloudinit_file"], 'r') as f:
+            payload["cloudinit_script"] = f.read().replace('\n', r'\n')
 
     logging.debug("Deploying machine")
     logging.debug(host)
@@ -108,7 +107,6 @@ def deploy_machine(host):
         data = payload
     )
     prepared = req.prepare()
-    prepared.body = prepared.body.replace("+", "%20")
 
     def pretty_print_POST(req):
         """
