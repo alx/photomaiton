@@ -137,13 +137,15 @@ def deploy_machine(host):
         ssh_port = 0
         http_port = 0
         for port in data["port_forwards"]:
+
             if int(data["port_forwards"][port]) == 22:
                 ssh_port = int(port)
-            if int(data["port_forwards"][port]) == 8888:
+                logging.info(f"ssh-keygen -f $HOME/.ssh/known_hosts -R '[%s]:%i'" % (data["ip"], ssh_port))
+                logging.info(f"ssh -o StrictHostKeyChecking=accept-new -p %i user@%s" % (ssh_port, data["ip"]))
+
+            if int(data["port_forwards"][port]) in [8888, 5000]:
                 http_port = int(port)
-        logging.info(f"ssh-keygen -f $HOME/.ssh/known_hosts -R '[%s]:%i'" % (data["ip"], ssh_port))
-        logging.info(f"ssh -o StrictHostKeyChecking=accept-new -p %i user@%s" % (ssh_port, data["ip"]))
-        logging.info(f"http://%s:%i" % (data["ip"], http_port))
+                logging.info(f"http://%s:%i" % (data["ip"], http_port))
 
     return success
 
@@ -211,6 +213,7 @@ def deploy_node():
 
     for key in host_nodes_keys:
         host = hosts["hostnodes"][key]
+        logging.debug(host)
         if is_host_eligible(host):
             host["id"] = key
             success = deploy_machine(host)
