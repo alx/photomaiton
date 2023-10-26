@@ -17,6 +17,10 @@ CURRENT_PATH = os.path.dirname(os.path.abspath(__file__))
 with open(Path(CURRENT_PATH, "config.json"), "r") as f:
     config = json.load(f)
 
+USB_STICK = config["usb_stick"]  # use of usb storage
+if USB_STICK:
+    CURRENT_PATH = os.path.dirname(config["usb_stick_adr"])
+
 LOG_FILENAME = Path(CURRENT_PATH, config["log_filename"])
 logging.basicConfig(
     format="%(asctime)s %(levelname)s %(message)s",
@@ -27,6 +31,7 @@ logging.basicConfig(
 
 PHOTO_COUNT = config["photo_count"]  # number of photos to take
 PHOTO_PAUSE = config["photo_pause"]  # in seconds
+ARDUINO_JSON = config["arduino_json"]  # communicate with serial & json (unless with gpio)
 
 # mastodon
 MASTODON_ENABLE = config["mastodon_enable"]
@@ -62,11 +67,13 @@ except FileNotFoundError:
     PROCESS_FILE_MASK.save(Path(PROCESS_ASSETS_FOLDER, "mask.jpg"))
 
 # Create logo image if it doesn't exist
-try:
-    PROCESS_FILE_LOGO = Image.open(Path(PROCESS_ASSETS_FOLDER, "logo.png"))
-except FileNotFoundError:
-    PROCESS_FILE_LOGO = Image.new("RGB", (0, 0), color="white")
-    PROCESS_FILE_LOGO.save(Path(PROCESS_ASSETS_FOLDER, "logo.png"))
+ADD_LOGO = config["add_logo"]
+if ADD_LOGO:
+    try:
+        PROCESS_FILE_LOGO = Image.open(Path(PROCESS_ASSETS_FOLDER, "logo.png"))
+    except FileNotFoundError:
+        PROCESS_FILE_LOGO = Image.new("RGB", (1, 1), color="white")
+        PROCESS_FILE_LOGO.save(Path(PROCESS_ASSETS_FOLDER, "logo.png"))
 
 # Final image for print (dnp ds 40 eat the borders / fond perdu)
 try:
@@ -89,11 +96,18 @@ except:
     logging.debug("Error importing RPi.GPIO")
 
 # Serial arduino
-try:
-    ser = serial.Serial("/dev/ttyUSB0", 9600, timeout=1)
-    ser.reset_input_buffer()
-except FileNotFoundError:
-    logging.debug("Error serial arduino")
+if ARDUINO_JSON:
+    try:
+        ser = serial.Serial("/dev/ttyUSB0", 9600, timeout=1)
+        ser.reset_input_buffer()
+    except:
+        logging.debug("Error serial arduino usb0")
+        try:
+            ser = serial.Serial("/dev/ttyUSB1", 9600, timeout=1)
+            ser.reset_input_buffer()
+        except:
+            logging.debug("Error serial arduino usb1")
+    
 
 
 def capture_webcam(
@@ -168,7 +182,6 @@ def capture(camera):
 
     for image_index in range(PHOTO_COUNT):
         time.sleep(PHOTO_PAUSE)
-        start = time.time()
 
         filename = str(image_index) + ".jpg"
         target = os.path.join(CAPTURE_PATH, filename)
@@ -187,9 +200,6 @@ def capture(camera):
             file_path.folder, file_path.name, gp.GP_FILE_TYPE_NORMAL
         )
         camera_file.save(target)
-
-        end = time.time() - start
-        logging.info(end)
 
     return capture_uuid
 
@@ -229,11 +239,15 @@ def capture_to_montage(capture_uuid):
     im3 = im3.resize((width, height))
     im4 = im4.resize((width, height))
 
+    im1.save("0.jpg")
+    im2.save("1.jpg")
+    im3.save("2.jpg")
+    im4.save("3.jpg")
+
     mask = PROCESS_FILE_MASK.resize(im1.size)
     mask = mask.convert("L")
 
     # im1.save('/tmp/0.jpg', quality=95)
-    start = time.time()
     PROCESS_FILE_BACKGROUND.paste(im1, (20, 20), mask)
     PROCESS_FILE_BACKGROUND.paste(im2, (915, 20), mask)
     PROCESS_FILE_BACKGROUND.paste(im3, (1810, 20), mask)
@@ -245,14 +259,13 @@ def capture_to_montage(capture_uuid):
     PROCESS_FILE_BACKGROUND.paste(im4.convert("L"), (2705, 1225), mask)
 
     # logos
-    PROCESS_FILE_BACKGROUND.paste(PROCESS_FILE_LOGO, (20, 800), PROCESS_FILE_LOGO)
-    PROCESS_FILE_BACKGROUND.paste(PROCESS_FILE_LOGO, (20, 2000), PROCESS_FILE_LOGO)
+    if ADD_LOGO:
+        PROCESS_FILE_BACKGROUND.paste(PROCESS_FILE_LOGO, (40, 920), PROCESS_FILE_LOGO)
+        PROCESS_FILE_BACKGROUND.paste(PROCESS_FILE_LOGO, (40, 2120), PROCESS_FILE_LOGO)
 
     # Add margins
-    PROCESS_FILE_MARGIN.paste(PROCESS_FILE_BACKGROUND, (17, 75))
+    PROCESS_FILE_MARGIN.paste(PROCESS_FILE_BACKGROUND, (65, 60))
     PROCESS_FILE_MARGIN.save(Path(CAPTURE_PATH, "print.jpg"), quality=95)
-    end = time.time() - start
-    logging.info(end)
 
 
 def print_image(capture_uuid):
@@ -288,23 +301,31 @@ def main():
 
         # Boucle de la mort
         while True:
-            # Commande" via serial de l'arduino
-            jason = {}
+            bStart = False
+            if ARDUINO_JSON:
+                # Commande" via serial de l'arduino
+                jason = {}
 
-            if ser.in_waiting > 0:
-                line = ser.readline().decode("utf-8").rstrip()
+                if ser.in_waiting > 0:
+                    line = ser.readline().decode("utf-8").rstrip()
 
-                try:
-                    jason = json.loads(line)
-                except json.decoder.JSONDecodeError:
-                    logging.info("Not json:" + str(line))
+                    try:
+                        jason = json.loads(line)
+                    except json.decoder.JSONDecodeError:
+                        logging.info("Not json:" + str(line))
 
-                logging.info("json:" + str(jason))
+                    logging.info("json:" + str(jason))
 
-                if "cmd" in jason and jason["cmd"] == 1:
-                    capture_uuid = capture(camera)
-                    output = process(capture_uuid)
-                    print_image(capture_uuid)
+                    if "cmd" in jason and jason["cmd"] == 1:
+                        bStart = True
+            else:
+                if GPIO.input(15):
+                    bStart = True
+
+            if bStart:
+                capture_uuid = capture(camera)
+                output = capture_to_montage(capture_uuid)
+                print_image(capture_uuid)      
 
         return 0
     else:

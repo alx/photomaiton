@@ -1,0 +1,5 @@
+Opencv qui mets 3 plombes à s'installer : sudo apt install python3-opencv
+Erreur numpy au lancement : 
+	https://numpy.org/devdocs/user/troubleshooting-importerror.html
+	pip3 uninstall numpy  # remove previously installed version
+	apt install python3-numpy

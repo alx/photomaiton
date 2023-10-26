@@ -50,6 +50,9 @@ void setup() {
   //Init strip
   strip.begin();
   strip.setBrightness(100);
+  for(byte i=0; i<strip.numPixels(); i++) {
+    strip.setPixelColor(i, !bClassic ? 255 : 0, 0, bClassic ? 255 : 0);
+  }
   strip.show();
   
   EEPROM.readBlock(EEPROM_ADRESS, parametres);
@@ -89,6 +92,7 @@ void loop() {
 
   // If coin acceptor OK and clic start button.
   if(manageCoinsAndStart(parametres.mode)) {
+    auxOn();
     /*parametres.totStrip += 1;
     parametres.bRunning = true;
     EEPROM.updateBlock(EEPROM_ADRESS, parametres);*/
@@ -107,6 +111,7 @@ void loop() {
       }
       delay(1000);
     }
+    auxOff();
     showSmiley();
     enableCoinAcceptor(parametres.mode);
     /*parametres.bRunning = false;
