@@ -2,6 +2,7 @@ import gphoto2 as gp
 import cv2
 import os
 import time
+import datetime
 import sys
 from PIL import Image
 import cups
@@ -13,13 +14,18 @@ from mastodon import Mastodon
 import serial
 import json
 
-CURRENT_PATH = os.path.dirname(os.path.abspath(__file__))
+args = sys.argv
+if len(args) >= 2:
+    CURRENT_PATH = os.path.abspath(args[1])
+else:
+    CURRENT_PATH = os.path.dirname(os.path.abspath(__file__))
+    
 with open(Path(CURRENT_PATH, "config.json"), "r") as f:
     config = json.load(f)
 
 USB_STICK = config["usb_stick"]  # use of usb storage
 if USB_STICK:
-    CURRENT_PATH = os.path.dirname(config["usb_stick_adr"])
+    CURRENT_PATH = os.path.abspath(config["usb_stick_adr"])
 
 LOG_FILENAME = Path(CURRENT_PATH, config["log_filename"])
 logging.basicConfig(
@@ -172,7 +178,8 @@ def init_camera():
 
 
 def capture(camera):
-    capture_uuid = uuid.uuid4()
+    #capture_uuid = uuid.uuid4()
+    capture_uuid = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
     CAPTURE_PATH = Path(CAPTURE_FOLDER, str(capture_uuid))
 
     if not CAPTURE_PATH.exists():
@@ -239,10 +246,10 @@ def capture_to_montage(capture_uuid):
     im3 = im3.resize((width, height))
     im4 = im4.resize((width, height))
 
-    im1.save("0.jpg")
-    im2.save("1.jpg")
-    im3.save("2.jpg")
-    im4.save("3.jpg")
+    im1.save(Path(CAPTURE_PATH,"0.jpg"))
+    im2.save(Path(CAPTURE_PATH,"1.jpg"))
+    im3.save(Path(CAPTURE_PATH,"2.jpg"))
+    im4.save(Path(CAPTURE_PATH,"3.jpg"))
 
     mask = PROCESS_FILE_MASK.resize(im1.size)
     mask = mask.convert("L")
