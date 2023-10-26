@@ -3,3 +3,9 @@ Erreur numpy au lancement :
 	https://numpy.org/devdocs/user/troubleshooting-importerror.html
 	pip3 uninstall numpy  # remove previously installed version
 	apt install python3-numpy
+
+Galéres avec mastodon au lancement via sh:
+	python -m pip uninstall mastodon-py
+	python -m pip install mastodon-py
+
+
