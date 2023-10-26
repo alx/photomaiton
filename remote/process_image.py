@@ -24,6 +24,7 @@ try:
         AutoencoderKL,
         ControlNetModel,
         UniPCMultistepScheduler,
+        DiffusionPipeline,
     )
     from diffusers.utils import load_image, make_image_grid
     from controlnet_aux import OpenposeDetector, ZoeDetector, LineartDetector
@@ -54,31 +55,31 @@ class ImageProcessor:
         device = torch.device("cuda:%i" % self.config["processor"]["gpu_id"])
 
         # load adapter
-        adapter = T2IAdapter.from_pretrained(
-            "TencentARC/t2i-adapter-depth-zoe-sdxl-1.0",
-            torch_dtype=torch.float16,
-            varient="fp16",
-        ).to(device)
+        # adapter = T2IAdapter.from_pretrained(
+        #     "TencentARC/t2i-adapter-depth-zoe-sdxl-1.0",
+        #     torch_dtype=torch.float16,
+        #     varient="fp16",
+        # ).to(device)
 
-        # load euler_a scheduler
-        model_id = "stabilityai/stable-diffusion-xl-base-1.0"
-        euler_a = EulerAncestralDiscreteScheduler.from_pretrained(
-            model_id,
-            subfolder="scheduler"
-        )
-        vae = AutoencoderKL.from_pretrained(
-            "madebyollin/sdxl-vae-fp16-fix",
-            torch_dtype=torch.float16
-        )
-        self.pipe = StableDiffusionXLAdapterPipeline.from_pretrained(
-            model_id,
-            vae=vae,
-            adapter=adapter,
-            scheduler=euler_a,
-            torch_dtype=torch.float16,
-            variant="fp16",
-        ).to(device)
-        self.pipe.enable_xformers_memory_efficient_attention()
+        # # load euler_a scheduler
+        # model_id = "segmind/SSD-1B"
+        # euler_a = EulerAncestralDiscreteScheduler.from_pretrained(
+        #     model_id,
+        #     subfolder="scheduler"
+        # )
+        # vae = AutoencoderKL.from_pretrained(
+        #     "madebyollin/sdxl-vae-fp16-fix",
+        #     torch_dtype=torch.float16
+        # )
+        # self.pipe = StableDiffusionXLAdapterPipeline.from_pretrained(
+        #     model_id,
+        #     vae=vae,
+        #     adapter=adapter,
+        #     scheduler=euler_a,
+        #     torch_dtype=torch.float16,
+        #     variant="fp16",
+        # ).to(device)
+        # self.pipe.enable_xformers_memory_efficient_attention()
 
         self.zoe_depth = ZoeDetector.from_pretrained(
             "valhalla/t2iadapter-aux-models",
@@ -105,6 +106,24 @@ class ImageProcessor:
             self.controlnet_pipe.scheduler.config
         )
         self.controlnet_pipe.enable_model_cpu_offload()
+
+        pipe_id = "stabilityai/stable-diffusion-xl-base-1.0"
+        self.pipe = DiffusionPipeline.from_pretrained(
+            pipe_id,
+            torch_dtype=torch.float16
+        ).to(device)
+
+        self.pipe.load_lora_weights(
+            "CiroN2022/toy-face",
+            weight_name="toy_face_sdxl.safetensors",
+            adapter_name="toy"
+        )
+        self.pipe.load_lora_weights(
+            "nerijs/pixel-art-xl",
+            weight_name="pixel-art-xl.safetensors",
+            adapter_name="pixel"
+        )
+        self.pipe.set_adapters("pixel")
 
         self.face_analyser = FaceAnalysis(name='buffalo_l')
         self.face_analyser.prepare(ctx_id=0)
@@ -220,13 +239,33 @@ class ImageProcessor:
             face_prompt = self.face_to_prompt(source_faces)
             prompt = ", ".join([prompt, face_prompt])
 
+        config_num_inference_steps = 30
+        config_adapter_conditioning_scale = 1
+        config_guidance_scale = 7.5
+        config_lora_scale = 0.9
+
+        if "pipe_params" in self.process_config:
+            pipe_params = self.process_config["pipe_params"]
+            if "num_inference_steps" in pipe_params:
+                config_num_inference_steps = pipe_params["num_inference_steps"]
+
+            if "adapter_conditioning_scale" in pipe_params:
+                config_adapter_conditioning_scale = pipe_params["adapter_conditioning_scale"]
+
+            if "guidance_scale" in pipe_params:
+                config_guidance_scale = pipe_params["guidance_scale"]
+
+            if "lora_scale" in pipe_params:
+                config_lora_scale = pipe_params["lora_scale"]
+
         dst_img = self.pipe(
             prompt=prompt,
             negative_prompt=negative_prompt,
             image=src_img,
-            num_inference_steps=30,
-            adapter_conditioning_scale=1,
-            guidance_scale=7.5,
+            num_inference_steps=config_num_inference_steps,
+            adapter_conditioning_scale=config_adapter_conditioning_scale,
+            guidance_scale=config_guidance_scale,
+            cross_attention_kwargs={"scale": config_lora_scale},
         ).images[0]
 
         dst_path = self.dst_path(capture)

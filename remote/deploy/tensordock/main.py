@@ -86,14 +86,13 @@ def deploy_machine(host):
         'internal_ports': str(set(config["host_config"]["internal_ports"])),
         'hostnode': host["id"],
         'storage': config["host_config"]["hdd"],
-        'operating_system': config["host_config"]["os"],
-        'cloud_init': r'{}'.format(cloud_init)
+        'operating_system': config["host_config"]["os"]
     }
 
-    if "cloud_init_file" in config["host_config"] and \
-        os.path.isfile(config["host_config"]["cloud_init_file"]):
-        with open(config["host_config"]["cloud_init_file"], 'r') as f:
-            payload["cloud_init"] = f.read().replace('\n', r'\n')
+    if "cloudinit_file" in config["host_config"] and \
+        os.path.isfile(config["host_config"]["cloudinit_file"]):
+        with open(config["host_config"]["cloudinit_file"], 'r') as f:
+            payload["cloudinit_script"] = f.read().replace('\n', r'\n')
 
     logging.debug("Deploying machine")
     logging.debug(host)
@@ -108,7 +107,6 @@ def deploy_machine(host):
         data = payload
     )
     prepared = req.prepare()
-    prepared.body = prepared.body.replace("+", "%20")
 
     def pretty_print_POST(req):
         """
@@ -131,15 +129,55 @@ def deploy_machine(host):
     response = requests.Session().send(prepared)
     logging.debug(response.text)
     data = json.loads(response.text)
+    success = data["success"]
     sleep(1)
-    logging.info("Machine deployed")
-    ssh_port = 0
-    for port in data["port_forwards"]:
-        if int(data["port_forwards"][port]) == 22:
-            ssh_port = int(port)
-    logging.info(f"ssh-keygen -f $HOME/.ssh/known_hosts -R '[%s]:%i'" % (data["ip"], ssh_port))
-    logging.info(f"ssh -o StrictHostKeyChecking=accept-new -p %i user@%s" % (ssh_port, data["ip"]))
-    return data["success"]
+
+    if success:
+        logging.info("Machine deployed")
+        ssh_port = 0
+        http_port = 0
+        for port in data["port_forwards"]:
+
+            if int(data["port_forwards"][port]) == 22:
+                ssh_port = int(port)
+                logging.info(f"ssh-keygen -f $HOME/.ssh/known_hosts -R '[%s]:%i'" % (data["ip"], ssh_port))
+                logging.info(f"ssh -o StrictHostKeyChecking=accept-new -p %i user@%s" % (ssh_port, data["ip"]))
+
+            if int(data["port_forwards"][port]) in [8888, 5000]:
+                http_port = int(port)
+                logging.info(f"http://%s:%i" % (data["ip"], http_port))
+
+    return success
+
+def info_deploys():
+
+    url_path = "/api/v0/client/list"
+    response = requests.request(
+        "POST",
+        config["tensordock"]["api_url"] + url_path,
+        data = {
+            'api_key': config["tensordock"]["api_key"],
+            'api_token': config["tensordock"]["api_token"]
+        }
+    )
+    sleep(1)
+    response = json.loads(response.text)
+
+    for server_uuid in response["virtualmachines"]:
+
+        url_path = "/api/v0/client/get/single"
+        response = requests.request(
+            "POST",
+            config["tensordock"]["api_url"] + url_path,
+            data = {
+                'api_key': config["tensordock"]["api_key"],
+                'api_token': config["tensordock"]["api_token"],
+                'server': server_uuid
+            }
+        )
+        response = json.loads(response.text)
+        logging.debug(response)
+        sleep(1)
 
 def delete_deploys():
 
@@ -175,15 +213,19 @@ def deploy_node():
 
     for key in host_nodes_keys:
         host = hosts["hostnodes"][key]
+        logging.debug(host)
         if is_host_eligible(host):
             host["id"] = key
-            deploy_machine(host)
-            break
+            success = deploy_machine(host)
+            if success:
+                break
 
 if is_api_available():
 
     if "--delete" in sys.argv:
         delete_deploys()
+    elif "--info" in sys.argv:
+        info_deploys()
     else:
         deploy_node()
 

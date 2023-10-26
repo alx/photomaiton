@@ -73,8 +73,14 @@ class UserListener(StreamListener):
                 )
             )
 
+        reply_text = f"@%s / %s %s" % (
+            notification["account"]["acct"],
+            self.config["mastodon_capture_reply_text"],
+            processed_medias[0]["description"]
+        )
+
         self.mastodon.status_post(
-            status=f"%s - @%s" % (self.config["mastodon_capture_reply_text"], notification["account"]["acct"]),
+            status=reply_text,
             in_reply_to_id=status["id"],
             media_ids=mastodon_media_ids,
             visibility="direct",
@@ -87,13 +93,30 @@ class UserListener(StreamListener):
         status = notification["status"]
 
         try:
+
             processable_update = (
-                str(notification["account"]["acct"]) in self.config["mastodon_whitelist_acct"]
-                and status["in_reply_to_id"] is None
+                status["in_reply_to_id"] is None
                 and status["replies_count"] == 0
             )
 
             if processable_update:
+
+                if "mastodon_whitelist_acct" in self.config:
+                    processable_update = (
+                        processable_update
+                        and str(notification["account"]["acct"]) in self.config["mastodon_whitelist_acct"]
+                    )
+
+                if "mastodon_whitelist_followers" in self.config:
+                    # use mastodon.py to get followers
+                    followers = []
+                    processable_update = (
+                        processable_update
+                        and str(notification["account"]["acct"]) in followers
+                    )
+
+            if processable_update:
+
                 capture_media_ids = self.download_media(status)
 
                 for capture_id in capture_media_ids:
@@ -103,8 +126,8 @@ class UserListener(StreamListener):
                 self.logging.debug("Update not processable")
 
                 if (
-                    str(status["account"]["id"])
-                    not in self.config["mastodon_whitelist_account_ids"]
+                    str(notification["account"]["acct"])
+                    not in self.config["mastodon_whitelist_acct"]
                 ):
                     self.logging.debug(
                         f"Account id %s is not whitelisted" % (status["account"]["id"])

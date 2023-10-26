@@ -19,4 +19,4 @@ mkdir checkpoints && wget -O ./checkpoints/inswapper_128.onnx https://huggingfac
 # and run python3 script in it
 tmux new-session -d \
     -s photomaiton \
-    'cd $HOME/photomaiton/remote/ ; python3 main.py --config $HOME/config.json'
+    'cd $HOME/photomaiton/remote/ ; python3 main.py --config $HOME/mastodon_bot.json'
