@@ -75,6 +75,8 @@ except FileNotFoundError:
 # Create logo image if it doesn't exist
 ADD_LOGO = config["add_logo"]
 if ADD_LOGO:
+    LOGO1_POS = config["logo1_pos"]
+    LOGO2_POS = config["logo2_pos"]
     try:
         PROCESS_FILE_LOGO = Image.open(Path(PROCESS_ASSETS_FOLDER, "logo.png"))
     except FileNotFoundError:
@@ -84,9 +86,12 @@ if ADD_LOGO:
 # Final image for print (dnp ds 40 eat the borders / fond perdu)
 try:
     PROCESS_FILE_MARGIN = Image.open(Path(PROCESS_ASSETS_FOLDER, "margin.jpg"))
+    MARGIN = config["margin"]
 except FileNotFoundError:
     PROCESS_FILE_MARGIN = Image.new("RGB", (3700, 2500), color="white")
     PROCESS_FILE_MARGIN.save(Path(PROCESS_ASSETS_FOLDER, "margin.png"))
+
+PRINT = config["print"]
 
 # Raspberry Pi
 ON_RASP = False  # will be set to True if running on Raspberry Pi
@@ -267,11 +272,11 @@ def capture_to_montage(capture_uuid):
 
     # logos
     if ADD_LOGO:
-        PROCESS_FILE_BACKGROUND.paste(PROCESS_FILE_LOGO, (40, 920), PROCESS_FILE_LOGO)
-        PROCESS_FILE_BACKGROUND.paste(PROCESS_FILE_LOGO, (40, 2120), PROCESS_FILE_LOGO)
+        PROCESS_FILE_BACKGROUND.paste(PROCESS_FILE_LOGO, (LOGO1_POS.x, LOGO1_POS.y), PROCESS_FILE_LOGO)
+        PROCESS_FILE_BACKGROUND.paste(PROCESS_FILE_LOGO, (LOGO2_POS.x, LOGO2_POS.y), PROCESS_FILE_LOGO)
 
     # Add margins
-    PROCESS_FILE_MARGIN.paste(PROCESS_FILE_BACKGROUND, (65, 60))
+    PROCESS_FILE_MARGIN.paste(PROCESS_FILE_BACKGROUND, (MARGIN.x, MARGIN.y))
     PROCESS_FILE_MARGIN.save(Path(CAPTURE_PATH, "print.jpg"), quality=95)
 
 
@@ -332,7 +337,8 @@ def main():
             if bStart:
                 capture_uuid = capture(camera)
                 output = capture_to_montage(capture_uuid)
-                print_image(capture_uuid)      
+                if PRINT:
+                    print_image(capture_uuid)      
 
         return 0
     else:
