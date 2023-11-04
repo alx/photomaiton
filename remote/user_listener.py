@@ -134,7 +134,7 @@ class UserListener(StreamListener):
                     not in self.config["mastodon_whitelist_acct"]
                 ):
                     self.logging.debug(
-                        f"Account id %s is not whitelisted" % (status["account"]["id"])
+                        f"Account acct %s is not whitelisted: %s" % (status["account"]["acct"], self.config["mastodon_whitelist_acct"])
                     )
 
                 if status["in_reply_to_id"] is not None:
