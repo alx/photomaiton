@@ -79,6 +79,10 @@ class UserListener(StreamListener):
             processed_medias[0]["description"]
         )
 
+        # limit reply text to 500 characters
+        if len(reply_text) > 500:
+            reply_text = reply_text[:497] + "..."
+
         self.mastodon.status_post(
             status=reply_text,
             in_reply_to_id=status["id"],
