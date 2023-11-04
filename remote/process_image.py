@@ -42,7 +42,7 @@ class ImageProcessor:
     def __init__(self,
                  config=None,
                  logging=None,
-                 swapper_model = "./checkpoints/inswapper_128.onnx"
+                 swapper_model = "/home/user/photomaiton/remote/checkpoints/inswapper_128.onnx"
                  ):
         self.config = config
 
