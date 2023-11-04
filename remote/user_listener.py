@@ -28,6 +28,7 @@ class UserListener(StreamListener):
         attachments = status["media_attachments"]
 
         for m in attachments:
+            self.logging.debug(f"Downloading media %s" % (m["url"]))
             media_id = m["id"]
             extension = m["url"].split(".")[-1]
 
@@ -103,24 +104,23 @@ class UserListener(StreamListener):
                 and status["replies_count"] == 0
             )
 
-            if processable_update:
+            if "mastodon_whitelist_acct" in self.config:
+                processable_update = processable_update and (
+                    processable_update
+                    and str(notification["account"]["acct"]) in self.config["mastodon_whitelist_acct"]
+                )
 
-                if "mastodon_whitelist_acct" in self.config:
-                    processable_update = (
-                        processable_update
-                        and str(notification["account"]["acct"]) in self.config["mastodon_whitelist_acct"]
-                    )
-
-                if "mastodon_whitelist_followers" in self.config:
-                    # use mastodon.py to get followers
-                    followers = []
-                    processable_update = (
-                        processable_update
-                        and str(notification["account"]["acct"]) in followers
-                    )
+            if "mastodon_whitelist_followers" in self.config:
+                # use mastodon.py to get followers
+                followers = []
+                processable_update = processable_update and (
+                    processable_update
+                    and str(notification["account"]["acct"]) in followers
+                )
 
             if processable_update:
 
+                self.logging.debug("Processable update")
                 capture_media_ids = self.download_media(status)
 
                 for capture_id in capture_media_ids:
