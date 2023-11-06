@@ -5,13 +5,8 @@ base/config.json
 base/log.txt
 base/captures/
 
-remote/config.json
-remote/log.txt
+remote/**/config.json
+remote/**/log.txt
 remote/mastodon/*.jpg
 remote/mastodon/*.png
 remote/draft/
-
-remote/deploy/tensordock/cloud_init.sh
-remote/deploy/tensordock/cloud_init.yml
-remote/deploy/tensordock/config.json
-remote/deploy/tensordock/log.txt
