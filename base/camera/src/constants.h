@@ -7,10 +7,13 @@
 #define DEBUG_MODE
 
 // If it run on arduino mega
-#define MEGA
+//#define MEGA
 
 // Uncomment if communication with raspi is with usb link & json
-//#define JSON
+#define JSON
+
+// Coin multiplier
+#define COIN_MULTI 10
 
 //PINS
 

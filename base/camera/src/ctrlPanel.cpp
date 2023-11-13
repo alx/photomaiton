@@ -159,7 +159,7 @@ void coinInterrupt(){
   //unsigned long difference = currentMillis - oldInterruptMillis;
   lastInterrupt = millis();
   //if(difference < 135 && difference >125){
-    cents += bCoinEnabled ? 50 : 0;
+    cents += bCoinEnabled ? COIN_MULTI : 0;
   //}
   if(cents > PRICE_CTS){
     cents = PRICE_CTS;

@@ -71,7 +71,7 @@ void setup() {
   
   parametres.mode = MODE_FREE;
   //parametres.mode = MODE_PAYING;
-  //parametres.price_cts = 400;
+  //parametres.price_cts = 300;
   auxOff();
   disableCoinAcceptor();
   initCoinSegment();
@@ -109,7 +109,7 @@ void loop() {
       while(getCountDown() > 0){
         refreshCountdown();
       }
-      delay(1000);
+      delay(1200);
     }
     auxOff();
     showSmiley();
