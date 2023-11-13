@@ -10,7 +10,7 @@ from tempfile import mktemp
 import logging
 from pathlib import Path
 import uuid
-from mastodon import Mastodon
+#from mastodon import Mastodon
 import serial
 import json
 
@@ -86,13 +86,13 @@ if ADD_LOGO:
 # Final image for print (dnp ds 40 eat the borders / fond perdu)
 try:
     PROCESS_FILE_MARGIN = Image.open(Path(PROCESS_ASSETS_FOLDER, "margin.jpg"))
-    MARGIN = config["margin"]
 except FileNotFoundError:
     PROCESS_FILE_MARGIN = Image.new("RGB", (3700, 2500), color="white")
     PROCESS_FILE_MARGIN.save(Path(PROCESS_ASSETS_FOLDER, "margin.png"))
 
 PRINT = config["print"]
-
+MARGIN = config["margin"]
+print(MARGIN)
 # Raspberry Pi
 ON_RASP = False  # will be set to True if running on Raspberry Pi
 GPIO_INPUT = 15  # GPIO pin to use for input
@@ -272,11 +272,11 @@ def capture_to_montage(capture_uuid):
 
     # logos
     if ADD_LOGO:
-        PROCESS_FILE_BACKGROUND.paste(PROCESS_FILE_LOGO, (LOGO1_POS.x, LOGO1_POS.y), PROCESS_FILE_LOGO)
-        PROCESS_FILE_BACKGROUND.paste(PROCESS_FILE_LOGO, (LOGO2_POS.x, LOGO2_POS.y), PROCESS_FILE_LOGO)
+        PROCESS_FILE_BACKGROUND.paste(PROCESS_FILE_LOGO, (LOGO1_POS['x'], LOGO1_POS['y']), PROCESS_FILE_LOGO)
+        PROCESS_FILE_BACKGROUND.paste(PROCESS_FILE_LOGO, (LOGO2_POS['x'], LOGO2_POS['y']), PROCESS_FILE_LOGO)
 
     # Add margins
-    PROCESS_FILE_MARGIN.paste(PROCESS_FILE_BACKGROUND, (MARGIN.x, MARGIN.y))
+    PROCESS_FILE_MARGIN.paste(PROCESS_FILE_BACKGROUND, (MARGIN['x'], MARGIN['y']))
     PROCESS_FILE_MARGIN.save(Path(CAPTURE_PATH, "print.jpg"), quality=95)
 
 
@@ -336,6 +336,10 @@ def main():
 
             if bStart:
                 capture_uuid = capture(camera)
+                for capture_filepath in capture_files(capture_uuid):
+                    print(capture_filepath)
+                    if MASTODON_ENABLE:
+                        output = capture_to_toot(capture_filepath)
                 output = capture_to_montage(capture_uuid)
                 if PRINT:
                     print_image(capture_uuid)      
