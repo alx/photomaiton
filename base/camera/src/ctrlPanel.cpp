@@ -63,6 +63,11 @@ boolean manageCoinsAndStart(byte mode){
   }else{
     bCarteOK = false;
   }
+
+  // Gestion start depuis raspi
+  if(initShot()){
+    cents = PRICE_CTS;
+  }
   
   
   switch(mode){

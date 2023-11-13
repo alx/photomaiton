@@ -69,9 +69,9 @@ void setup() {
     EEPROM.writeBlock(EEPROM_ADRESS, parametres);
   }
   
-  parametres.mode = MODE_FREE;
-  //parametres.mode = MODE_PAYING;
-  //parametres.price_cts = 300;
+  //parametres.mode = MODE_FREE;
+  parametres.mode = MODE_PAYING;
+  parametres.price_cts = 300;
   auxOff();
   disableCoinAcceptor();
   initCoinSegment();

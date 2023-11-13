@@ -328,7 +328,7 @@ def main():
 
                     logging.info("json:" + str(jason))
 
-                    if "cmd" in jason and jason["cmd"] == 1:
+                    if "cmd" in jason and jason["cmd"] == "startShot":
                         bStart = True
             else:
                 if GPIO.input(15):
