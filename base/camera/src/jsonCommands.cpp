@@ -1,6 +1,7 @@
 #include "jsonCommands.h"
 
 StaticJsonDocument<500> jason;
+String lastCommand = "";
 
 void startShot(bool mode){
     jason.clear();
@@ -18,8 +19,7 @@ void startShot(bool mode){
     Serial.println();
 };
 
-String checkAvailableCommand(){
-    String cmd = "";
+void checkAvailableCommand(){
     if (Serial.available()) {
         char incomingData[200];  // json de 200 caractéres max
         int bytesRead = Serial.readBytesUntil('\n', incomingData, sizeof(incomingData));
@@ -28,12 +28,25 @@ String checkAvailableCommand(){
         DeserializationError error = deserializeJson(jason, incomingData);
 
         if (!error) {
-            cmd = jason["cmd"].as<String>();
+            lastCommand = jason["cmd"].as<String>();
         }
     }
-    return cmd;
 }
 
-bool initShot(){
-    return checkAvailableCommand() == "initShot";
+bool checkCmdInitShot(){
+    checkAvailableCommand();
+    if(lastCommand == "initShot"){
+        lastCommand = "";
+        return true;
+    }
+    return false;
+}
+
+bool checkCmdStartShot(){
+    checkAvailableCommand();
+    if(lastCommand == "startShot"){
+        lastCommand = "";
+        return true;
+    }
+    return false;
 }

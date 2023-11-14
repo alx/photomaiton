@@ -64,11 +64,10 @@ boolean manageCoinsAndStart(byte mode){
     bCarteOK = false;
   }
 
-  // Gestion start depuis raspi
-  if(initShot()){
+  // Gestion paiement ok depuis raspi
+  if(checkCmdInitShot()){
     cents = PRICE_CTS;
   }
-  
   
   switch(mode){
     case MODE_PAYING:
@@ -94,6 +93,13 @@ boolean manageCoinsAndStart(byte mode){
 
   currentMillis = millis();
   refreshCoinSegment(mode);
+
+  // Gestion lancement séquence depuis raspi
+  if(checkCmdStartShot()){
+    cents = PRICE_CTS;
+    bStart = true;
+  }
+
   if(bStart){
     disableCoinAcceptor();
     coinSegment.setSegments(SEG_BUSY);

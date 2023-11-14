@@ -6,5 +6,6 @@
 #include "ctrlPanel.h"
 
 void startShot(bool mode);
-bool initShot();
+bool checkCmdInitShot();
+bool checkCmdStartShot();
 #endif
