@@ -1,5 +1,6 @@
 #
-# Send json command to arduino to start photo sequence (=payment ok)
+# Send json command to arduino to start photo sequence
+#
 
 import serial
 import json
@@ -31,11 +32,11 @@ except:
 
 def main():
     cmd = {
-    "cmd": "initShot",
+    "cmd": "startShot",
     }
 
     # convert into JSON:
-    jason = json.dumps(cmd)
+    jason = json.dumps(cmd).encode('utf-8')
     ser.write(jason)
     return 1
 
