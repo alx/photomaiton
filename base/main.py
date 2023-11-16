@@ -230,8 +230,19 @@ def save_ia_image(capture_path, index, prompt):
 
     try:
         source = Image.open(Path(capture_path, f"%i.jpg" % index))
+        ratio = min(512 / source.size[0], 512 / source.size[1])
+        nouvelle_taille = (int(source.size[0] * ratio), int(source.size[1] * ratio))
+        source = source.resize(nouvelle_taille, Image.Resampling.LANCZOS)
+        taille_finale = (512, 512)
+        image_finale = Image.new("RGB", taille_finale, "black")
+        x = (taille_finale[0] - nouvelle_taille[0]) // 2
+        y = (taille_finale[1] - nouvelle_taille[1]) // 2
+
+        # Coller l'image source sur l'image finale
+        image_finale.paste(source, (x, y))
+
         buffered = BytesIO()
-        source.save(buffered, format="JPEG")
+        image_finale.save(buffered, format="JPEG")
 
         img_str = base64.b64encode(buffered.getvalue())
 
@@ -282,22 +293,22 @@ def capture_to_montage(capture_uuid, bIA):
     
     if bIA:
         try:
-            imia1 = processImage(capture_uuid, "0.ia.jpg")
+            imia1 = Image.open(Path(CAPTURE_PATH, "0.ia.jpg"))
         except FileNotFoundError:
             imia1 = im1
             bIA = False
         try:
-            imia2 = processImage(capture_uuid, "1.ia.jpg")
+            imia2 = Image.open(Path(CAPTURE_PATH, "1.ia.jpg"))
         except FileNotFoundError:
             imia2 = im2
             bIA = False
         try:
-            imia3 = processImage(capture_uuid, "2.ia.jpg")
+            imia3 = Image.open(Path(CAPTURE_PATH, "2.ia.jpg"))
         except FileNotFoundError:
             imia3 = im3
             bIA = False
         try:
-            imia4 = processImage(capture_uuid, "3.ia.jpg")
+            imia4 = Image.open(Path(CAPTURE_PATH, "3.ia.jpg"))
         except FileNotFoundError:
             imia4 = im4
             bIA = False
