@@ -17,6 +17,7 @@ import argparse
 import traceback
 import base64
 import requests
+import usb.core
 
 CURRENT_PATH = os.path.dirname(os.path.abspath(__file__))
 parser = argparse.ArgumentParser(description="Read config file path")
@@ -157,10 +158,12 @@ def capture_webcam(
 # Only run if on Raspberry Pi
 def init_camera():
     logging.info("Camera init - Wait loop for camera")
-    error, camera = gp.gp_camera_new()
+    
+    global CAMERA
+    error, CAMERA = gp.gp_camera_new()
 
     while True:
-        error = gp.gp_camera_init(camera)
+        error = gp.gp_camera_init(CAMERA)
 
         if error >= gp.GP_OK:
             # operation completed successfully so exit loop
@@ -173,12 +176,12 @@ def init_camera():
 
     # capture pour enclencher le process sinon Ã§a le fait pas
     logging.info("Camera init - first capture")
-    camera.capture(gp.GP_CAPTURE_IMAGE)
+    CAMERA.capture(gp.GP_CAPTURE_IMAGE)
 
     # continue with rest of program
     logging.info("Camera init - continue")
 
-    return camera
+    return CAMERA
 
 
 def capture(camera):
@@ -246,13 +249,13 @@ def save_ia_image(capture_path, index, prompt):
     except Exception:
         logging.debug(traceback.format_exc())
 
-def capture_to_ia(capture_uuid):
+def capture_to_ia(capture_uuid, jason):
 
     CAPTURE_PATH = Path(CAPTURE_FOLDER, str(capture_uuid))
-    save_ia_image(CAPTURE_PATH, 0, config["prompt"])
-    save_ia_image(CAPTURE_PATH, 1, config["prompt"])
-    save_ia_image(CAPTURE_PATH, 2, config["prompt"])
-    save_ia_image(CAPTURE_PATH, 3, config["prompt"])
+    save_ia_image(CAPTURE_PATH, 0, config["prompts"]["A"+ str(jason[0] + 1)])
+    save_ia_image(CAPTURE_PATH, 1, config["prompts"]["B"+ str(jason[1] + 1)])
+    save_ia_image(CAPTURE_PATH, 2, config["prompts"]["C"+ str(jason[2] + 1)])
+    save_ia_image(CAPTURE_PATH, 3, config["prompts"]["D"+ str(jason[3] + 1)])
 
 def processImage(capture_uuid, imgName):
     CAPTURE_PATH = Path(CAPTURE_FOLDER, str(capture_uuid))
@@ -264,20 +267,40 @@ def processImage(capture_uuid, imgName):
     img.save(Path(CAPTURE_PATH,imgName))
     return img
 
-def capture_to_montage(capture_uuid, bIA):
-    CAPTURE_PATH = Path(CAPTURE_FOLDER, str(capture_uuid))
-    
+def processImages(capture_uuid):
     im1 = processImage(capture_uuid, "0.jpg")
     im2 = processImage(capture_uuid, "1.jpg")
     im3 = processImage(capture_uuid, "2.jpg")
     im4 = processImage(capture_uuid, "3.jpg")
 
+def capture_to_montage(capture_uuid, bIA):
+    CAPTURE_PATH = Path(CAPTURE_FOLDER, str(capture_uuid))
+    im1 = Image.open(Path(CAPTURE_PATH, "0.jpg"))
+    im2 = Image.open(Path(CAPTURE_PATH, "1.jpg"))
+    im3 = Image.open(Path(CAPTURE_PATH, "2.jpg"))
+    im4 = Image.open(Path(CAPTURE_PATH, "3.jpg"))
+    
     if bIA:
-        imia1 = processImage(capture_uuid, "0.ia.jpg")
-        imia2 = processImage(capture_uuid, "1.ia.jpg")
-        imia3 = processImage(capture_uuid, "2.ia.jpg")
-        imia4 = processImage(capture_uuid, "3.ia.jpg")
-
+        try:
+            imia1 = processImage(capture_uuid, "0.ia.jpg")
+        except FileNotFoundError:
+            imia1 = im1
+            bIA = False
+        try:
+            imia2 = processImage(capture_uuid, "1.ia.jpg")
+        except FileNotFoundError:
+            imia2 = im2
+            bIA = False
+        try:
+            imia3 = processImage(capture_uuid, "2.ia.jpg")
+        except FileNotFoundError:
+            imia3 = im3
+            bIA = False
+        try:
+            imia4 = processImage(capture_uuid, "3.ia.jpg")
+        except FileNotFoundError:
+            imia4 = im4
+            bIA = False
 
     mask = PROCESS_FILE_MASK.resize(im1.size)
     mask = mask.convert("L")
@@ -338,6 +361,7 @@ def print_image(capture_uuid):
 def main():
     if ON_RASP:
         # init camera
+        global CAMERA
         CAMERA = init_camera()
 
         # Boucle de la mort
@@ -365,8 +389,9 @@ def main():
 
             if bStart:
                 capture_uuid = capture(CAMERA)
+                processImages(capture_uuid)
                 if "mode" in jason and jason["mode"] == "ia":
-                    capture_to_ia(capture_uuid)
+                    capture_to_ia(capture_uuid, jason["styl"])
                 output = capture_to_montage(capture_uuid, "mode" in jason and jason["mode"] == "ia")
                 if PRINT:
                     print_image(capture_uuid)      
@@ -383,15 +408,7 @@ def main():
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except Exception as err:
-        print("ERREUR: ",err)
-        logging.debug("ERREUR: ",err)
-    finally:
-        gp.gp_camera_exit(CAMERA)
-        logging.info("Release camera")
-        
+    main()
     logging.info("Stop")
 
 
