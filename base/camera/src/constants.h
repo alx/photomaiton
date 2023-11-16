@@ -51,7 +51,7 @@
 #define WAIT_BETWEEN_SHOT 5000 // Wait between shot in ms.
 
 // Modes and prices
-#define PRICE_CTS 400 // Price of a photo in cents.
+#define PRICE_CTS 300 // Price of a photo in cents.
 #define FREE_PRICE_CTS 100 // Minimum in free price mode
 #define MODE_PAYING 0
 #define MODE_FREE_PRICE 1
@@ -65,7 +65,7 @@ struct storage {
   int totStrip = 0;
   byte mode = 0;// O = paying, 1 = Free price, 2 = Free
   float totMoney = 0;
-  int price_cts = 400;
+  int price_cts = 300;
   int free_price_cts = 100;
   int tank_time = 18000;
   bool bRunning = false;

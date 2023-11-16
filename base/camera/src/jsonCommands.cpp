@@ -7,7 +7,7 @@ void startShot(bool mode){
     jason.clear();
     jason["cmd"] = "startShot";
     jason["pay"] = 0;//0 =cash, 1=cb
-    jason["ia"] = mode ? 0 : 1;//0 = normal, 1 = ia.
+    jason["mode"] = mode ? "std" : "ia";//0 = normal, 1 = ia.
     JsonArray data = jason.createNestedArray("styl");
 
     data.add(readRotSwitch(ROTSW1_PIN));
@@ -33,6 +33,15 @@ void checkAvailableCommand(){
     }
 }
 
+bool checkCmdStartShot(){
+    checkAvailableCommand();
+    if(lastCommand == "startShot"){
+        lastCommand = "";
+        return true;
+    }
+    return false;
+}
+
 bool checkCmdInitShot(){
     checkAvailableCommand();
     if(lastCommand == "initShot"){
@@ -42,11 +51,29 @@ bool checkCmdInitShot(){
     return false;
 }
 
-bool checkCmdStartShot(){
+bool checkCmdCountdown(){
     checkAvailableCommand();
-    if(lastCommand == "startShot"){
+    if(lastCommand == "countdown"){
         lastCommand = "";
         return true;
     }
     return false;
 }
+
+bool checkCmd(String cmd){
+    checkAvailableCommand();
+    if(lastCommand == cmd){
+        lastCommand = "";
+        return true;
+    }
+    return false;
+}
+
+void sendSerial(bool mode){
+    jason.clear();
+    jason["serial"] = "startShot";
+
+    //Serial.println(jason.overflowed());
+    serializeJson(jason, Serial);
+    Serial.println();
+};

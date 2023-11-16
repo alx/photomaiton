@@ -10,17 +10,25 @@ from tempfile import mktemp
 import logging
 from pathlib import Path
 import uuid
-#from mastodon import Mastodon
 import serial
 import json
+from io import BytesIO
+import argparse
+import traceback
+import base64
+import requests
 
-args = sys.argv
-if len(args) >= 2:
-    CURRENT_PATH = os.path.abspath(args[1])
-else:
-    CURRENT_PATH = os.path.dirname(os.path.abspath(__file__))
-    
-with open(Path(CURRENT_PATH, "config.json"), "r") as f:
+CURRENT_PATH = os.path.dirname(os.path.abspath(__file__))
+parser = argparse.ArgumentParser(description="Read config file path")
+parser.add_argument(
+    "--config",
+    type=str,
+    default=Path(CURRENT_PATH, "config.json"),
+    help="Path to the configuration file"
+)
+args = parser.parse_args()
+
+with open(args.config, "r") as f:
     config = json.load(f)
 
 USB_STICK = config["usb_stick"]  # use of usb storage
@@ -38,15 +46,6 @@ logging.basicConfig(
 PHOTO_COUNT = config["photo_count"]  # number of photos to take
 PHOTO_PAUSE = config["photo_pause"]  # in seconds
 ARDUINO_JSON = config["arduino_json"]  # communicate with serial & json (unless with gpio)
-
-# mastodon
-MASTODON_ENABLE = config["mastodon_enable"]
-
-if MASTODON_ENABLE:
-    mastodon = Mastodon(
-        api_base_url=config["mastodon_base_url"],
-        access_token=config["mastodon_access_token"],
-    )
 
 # Folder containing background
 PROCESS_ASSETS_FOLDER = Path(CURRENT_PATH, "assets/")
@@ -92,7 +91,7 @@ except FileNotFoundError:
 
 PRINT = config["print"]
 MARGIN = config["margin"]
-print(MARGIN)
+
 # Raspberry Pi
 ON_RASP = False  # will be set to True if running on Raspberry Pi
 GPIO_INPUT = 15  # GPIO pin to use for input
@@ -118,8 +117,8 @@ if ARDUINO_JSON:
             ser.reset_input_buffer()
         except:
             logging.debug("Error serial arduino usb1")
-    
 
+CAMERA = None
 
 def capture_webcam(
     nb_photos=1,
@@ -172,7 +171,7 @@ def init_camera():
         # no camera, try again in 2 seconds
         time.sleep(2)
 
-    # capture pour enclencher le process sinon ça le fait pas
+    # capture pour enclencher le process sinon Ã§a le fait pas
     logging.info("Camera init - first capture")
     camera.capture(gp.GP_CAPTURE_IMAGE)
 
@@ -193,6 +192,8 @@ def capture(camera):
     logging.info("Capture - Start shooting - " + str(capture_uuid))
 
     for image_index in range(PHOTO_COUNT):
+        # arduino show countdown order
+        ser.write(json.dumps({"cmd": "countdown",}).encode('utf-8'))
         time.sleep(PHOTO_PAUSE)
 
         filename = str(image_index) + ".jpg"
@@ -221,40 +222,62 @@ def capture_files(capture_uuid):
     return [str(x) for x in CAPTURE_PATH.iterdir() if x.is_file()]
 
 
-def capture_to_toot(image_filepath):
-    media_ids = mastodon.media_post(image_filepath)
+    
+def save_ia_image(capture_path, index, prompt):
 
-    mastodon.status_post(
-        status="@alx prompt: test image | negative_prompt: cartoon | other_param: 0.2",
-        media_ids=media_ids,
-        visibility="direct",
-    )
+    try:
+        source = Image.open(Path(capture_path, f"%i.jpg" % index))
+        buffered = BytesIO()
+        source.save(buffered, format="JPEG")
 
+        img_str = base64.b64encode(buffered.getvalue())
 
-def capture_to_montage(capture_uuid):
+        payload ={"prompt": prompt, "file": img_str}
+        logging.debug(config["vmgpu_url"])
+        logging.debug(payload)
+        response = requests.post(url=config["vmgpu_url"], data=payload)
+
+        if response.status_code == 200:
+            filepath = Path(capture_path, f"%i.ia.jpg" % index)
+            logging.debug(filepath)
+            with open(filepath, 'wb') as f:
+                f.write(response.content)
+
+    except Exception:
+        logging.debug(traceback.format_exc())
+
+def capture_to_ia(capture_uuid):
+
     CAPTURE_PATH = Path(CAPTURE_FOLDER, str(capture_uuid))
-    im1 = Image.open(Path(CAPTURE_PATH, "0.jpg"))
-    im2 = Image.open(Path(CAPTURE_PATH, "1.jpg"))
-    im3 = Image.open(Path(CAPTURE_PATH, "2.jpg"))
-    im4 = Image.open(Path(CAPTURE_PATH, "3.jpg"))
+    save_ia_image(CAPTURE_PATH, 0, config["prompt"])
+    save_ia_image(CAPTURE_PATH, 1, config["prompt"])
+    save_ia_image(CAPTURE_PATH, 2, config["prompt"])
+    save_ia_image(CAPTURE_PATH, 3, config["prompt"])
 
+def processImage(capture_uuid, imgName):
+    CAPTURE_PATH = Path(CAPTURE_FOLDER, str(capture_uuid))
+    img = Image.open(Path(CAPTURE_PATH, imgName))
     crop = (744, 0, 2232, 1984)
-    im1 = im1.crop(crop)
-    im2 = im2.crop(crop)
-    im3 = im3.crop(crop)
-    im4 = im4.crop(crop)
-
-    # resize
+    img = img.crop(crop)
     (width, height) = (875, 1150)
-    im1 = im1.resize((width, height))
-    im2 = im2.resize((width, height))
-    im3 = im3.resize((width, height))
-    im4 = im4.resize((width, height))
+    img = img.resize((width, height))
+    img.save(Path(CAPTURE_PATH,imgName))
+    return img
 
-    im1.save(Path(CAPTURE_PATH,"0.jpg"))
-    im2.save(Path(CAPTURE_PATH,"1.jpg"))
-    im3.save(Path(CAPTURE_PATH,"2.jpg"))
-    im4.save(Path(CAPTURE_PATH,"3.jpg"))
+def capture_to_montage(capture_uuid, bIA):
+    CAPTURE_PATH = Path(CAPTURE_FOLDER, str(capture_uuid))
+    
+    im1 = processImage(capture_uuid, "0.jpg")
+    im2 = processImage(capture_uuid, "1.jpg")
+    im3 = processImage(capture_uuid, "2.jpg")
+    im4 = processImage(capture_uuid, "3.jpg")
+
+    if bIA:
+        imia1 = processImage(capture_uuid, "0.ia.jpg")
+        imia2 = processImage(capture_uuid, "1.ia.jpg")
+        imia3 = processImage(capture_uuid, "2.ia.jpg")
+        imia4 = processImage(capture_uuid, "3.ia.jpg")
+
 
     mask = PROCESS_FILE_MASK.resize(im1.size)
     mask = mask.convert("L")
@@ -264,11 +287,17 @@ def capture_to_montage(capture_uuid):
     PROCESS_FILE_BACKGROUND.paste(im2, (915, 20), mask)
     PROCESS_FILE_BACKGROUND.paste(im3, (1810, 20), mask)
     PROCESS_FILE_BACKGROUND.paste(im4, (2705, 20), mask)
-    # noir et blanc
-    PROCESS_FILE_BACKGROUND.paste(im1.convert("L"), (20, 1225), mask)
-    PROCESS_FILE_BACKGROUND.paste(im2.convert("L"), (915, 1225), mask)
-    PROCESS_FILE_BACKGROUND.paste(im3.convert("L"), (1810, 1225), mask)
-    PROCESS_FILE_BACKGROUND.paste(im4.convert("L"), (2705, 1225), mask)
+    # noir et blanc ou IA
+    if bIA:
+        PROCESS_FILE_BACKGROUND.paste(imia1, (20, 1225), mask)
+        PROCESS_FILE_BACKGROUND.paste(imia2, (915, 1225), mask)
+        PROCESS_FILE_BACKGROUND.paste(imia3, (1810, 1225), mask)
+        PROCESS_FILE_BACKGROUND.paste(imia4, (2705, 1225), mask)
+    else:
+        PROCESS_FILE_BACKGROUND.paste(im1.convert("L"), (20, 1225), mask)
+        PROCESS_FILE_BACKGROUND.paste(im2.convert("L"), (915, 1225), mask)
+        PROCESS_FILE_BACKGROUND.paste(im3.convert("L"), (1810, 1225), mask)
+        PROCESS_FILE_BACKGROUND.paste(im4.convert("L"), (2705, 1225), mask)
 
     # logos
     if ADD_LOGO:
@@ -309,7 +338,7 @@ def print_image(capture_uuid):
 def main():
     if ON_RASP:
         # init camera
-        camera = init_camera()
+        CAMERA = init_camera()
 
         # Boucle de la mort
         while True:
@@ -335,12 +364,10 @@ def main():
                     bStart = True
 
             if bStart:
-                capture_uuid = capture(camera)
-                for capture_filepath in capture_files(capture_uuid):
-                    print(capture_filepath)
-                    if MASTODON_ENABLE:
-                        output = capture_to_toot(capture_filepath)
-                output = capture_to_montage(capture_uuid)
+                capture_uuid = capture(CAMERA)
+                if "mode" in jason and jason["mode"] == "ia":
+                    capture_to_ia(capture_uuid)
+                output = capture_to_montage(capture_uuid, "mode" in jason and jason["mode"] == "ia")
                 if PRINT:
                     print_image(capture_uuid)      
 
@@ -356,4 +383,15 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as err:
+        print("ERREUR: ",err)
+        logging.debug("ERREUR: ",err)
+    finally:
+        gp.gp_camera_exit(CAMERA)
+        logging.info("Release camera")
+        
+    logging.info("Stop")
+
+

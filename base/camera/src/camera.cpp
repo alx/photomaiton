@@ -27,11 +27,19 @@ Output<AUX_PIN> aux;
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(40, STRIP_PIN, NEO_GRB + NEO_KHZ800);
 
 void auxOn() {
-  aux.write(HIGH);
+  #ifdef MEGA
+    aux.write(HIGH);
+  #else
+    aux.write(LOW);
+  #endif
 }
 
 void auxOff() {
-  aux.write(LOW);
+  #ifdef MEGA
+    aux.write(LOW);
+  #else
+    aux.write(HIGH);
+  #endif
 }
 
 
@@ -63,7 +71,7 @@ void setup() {
     parametres.totMoney = 0;
     parametres.totStrip = 0;
     parametres.mode = MODE_PAYING;
-    parametres.price_cts = 400;
+    parametres.price_cts = 300;
     parametres.free_price_cts = 100;
     parametres.bRunning = false;
     EEPROM.writeBlock(EEPROM_ADRESS, parametres);
@@ -105,12 +113,27 @@ void loop() {
     #endif
 
     for(byte i = 0; i < 4;i++){
+      #ifdef JSON
+        unsigned long currMillis = millis();
+        unsigned long timeout = currMillis;
+        while(!checkCmdCountdown()){
+          currMillis = millis();
+          if(currMillis - timeout > 3000){
+            // si pas de réponse aprés timeout 3sec, continue.
+            break;
+          }
+        }
+      #endif  
       showCountdown();
       while(getCountDown() > 0){
         refreshCountdown();
       }
-      delay(1200);
+      #ifndef JSON
+        delay(1000);
+      #endif
     }
+    // 2 more sec before switching aux off.
+    delay(2000);
     auxOff();
     showSmiley();
     enableCoinAcceptor(parametres.mode);
