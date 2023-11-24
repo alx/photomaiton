@@ -10,17 +10,26 @@ from tempfile import mktemp
 import logging
 from pathlib import Path
 import uuid
-from mastodon import Mastodon
 import serial
 import json
+from io import BytesIO
+import argparse
+import traceback
+import base64
+import requests
+import usb.core
 
-args = sys.argv
-if len(args) >= 2:
-    CURRENT_PATH = os.path.abspath(args[1])
-else:
-    CURRENT_PATH = os.path.dirname(os.path.abspath(__file__))
-    
-with open(Path(CURRENT_PATH, "config.json"), "r") as f:
+CURRENT_PATH = os.path.dirname(os.path.abspath(__file__))
+parser = argparse.ArgumentParser(description="Read config file path")
+parser.add_argument(
+    "--config",
+    type=str,
+    default=Path(CURRENT_PATH, "config.json"),
+    help="Path to the configuration file"
+)
+args = parser.parse_args()
+
+with open(args.config, "r") as f:
     config = json.load(f)
 
 USB_STICK = config["usb_stick"]  # use of usb storage
@@ -38,15 +47,6 @@ logging.basicConfig(
 PHOTO_COUNT = config["photo_count"]  # number of photos to take
 PHOTO_PAUSE = config["photo_pause"]  # in seconds
 ARDUINO_JSON = config["arduino_json"]  # communicate with serial & json (unless with gpio)
-
-# mastodon
-MASTODON_ENABLE = config["mastodon_enable"]
-
-if MASTODON_ENABLE:
-    mastodon = Mastodon(
-        api_base_url=config["mastodon_base_url"],
-        access_token=config["mastodon_access_token"],
-    )
 
 # Folder containing background
 PROCESS_ASSETS_FOLDER = Path(CURRENT_PATH, "assets/")
@@ -86,12 +86,12 @@ if ADD_LOGO:
 # Final image for print (dnp ds 40 eat the borders / fond perdu)
 try:
     PROCESS_FILE_MARGIN = Image.open(Path(PROCESS_ASSETS_FOLDER, "margin.jpg"))
-    MARGIN = config["margin"]
 except FileNotFoundError:
     PROCESS_FILE_MARGIN = Image.new("RGB", (3700, 2500), color="white")
     PROCESS_FILE_MARGIN.save(Path(PROCESS_ASSETS_FOLDER, "margin.png"))
 
 PRINT = config["print"]
+MARGIN = config["margin"]
 
 # Raspberry Pi
 ON_RASP = False  # will be set to True if running on Raspberry Pi
@@ -118,8 +118,8 @@ if ARDUINO_JSON:
             ser.reset_input_buffer()
         except:
             logging.debug("Error serial arduino usb1")
-    
 
+CAMERA = None
 
 def capture_webcam(
     nb_photos=1,
@@ -158,10 +158,12 @@ def capture_webcam(
 # Only run if on Raspberry Pi
 def init_camera():
     logging.info("Camera init - Wait loop for camera")
-    error, camera = gp.gp_camera_new()
+    
+    global CAMERA
+    error, CAMERA = gp.gp_camera_new()
 
     while True:
-        error = gp.gp_camera_init(camera)
+        error = gp.gp_camera_init(CAMERA)
 
         if error >= gp.GP_OK:
             # operation completed successfully so exit loop
@@ -174,12 +176,12 @@ def init_camera():
 
     # capture pour enclencher le process sinon ça le fait pas
     logging.info("Camera init - first capture")
-    camera.capture(gp.GP_CAPTURE_IMAGE)
+    CAMERA.capture(gp.GP_CAPTURE_IMAGE)
 
     # continue with rest of program
     logging.info("Camera init - continue")
 
-    return camera
+    return CAMERA
 
 
 def capture(camera):
@@ -193,6 +195,8 @@ def capture(camera):
     logging.info("Capture - Start shooting - " + str(capture_uuid))
 
     for image_index in range(PHOTO_COUNT):
+        # arduino show countdown order
+        ser.write(json.dumps({"cmd": "countdown",}).encode('utf-8'))
         time.sleep(PHOTO_PAUSE)
 
         filename = str(image_index) + ".jpg"
@@ -221,40 +225,119 @@ def capture_files(capture_uuid):
     return [str(x) for x in CAPTURE_PATH.iterdir() if x.is_file()]
 
 
-def capture_to_toot(image_filepath):
-    media_ids = mastodon.media_post(image_filepath)
+    
+def save_ia_image(capture_path, index, prompt):
+    try:
+        source_image_path = Path(capture_path, f"{index}.jpg")
+        with Image.open(source_image_path) as source:
+            # Calcul du ratio pour obtenir la taille de l'image originale en 512x512
+            ratio = min(512 / source.size[0], 512 / source.size[1])
+            new_size = (int(source.size[0] * ratio), int(source.size[1] * ratio))
+            source = source.resize(new_size, Image.Resampling.LANCZOS)
+            
+            # Création de l'image finale de fond noir en 512x512
+            final_size = (512, 512)
+            final_image = Image.new("RGB", final_size, "black")
+            
+            # Calcul des positions pour centrer l'image source dans l'image finale
+            x = (final_size[0] - new_size[0]) // 2
+            y = (final_size[1] - new_size[1]) // 2
+            
+            # Coller l'image source sur l'image finale
+            final_image.paste(source, (x, y))
 
-    mastodon.status_post(
-        status="@alx prompt: test image | negative_prompt: cartoon | other_param: 0.2",
-        media_ids=media_ids,
-        visibility="direct",
-    )
+            # Préparation de l'image pour l'envoi
+            buffered = BytesIO()
+            final_image.save(buffered, format="JPEG")
+            img_str = base64.b64encode(buffered.getvalue())
 
+            # Envoi de l'image par POST
+            payload = {"prompt": prompt["positive"],"negative_prompt": prompt["negative"], "file": img_str}
+            logging.debug(config["vmgpu_url"])
+            logging.debug(payload)
+            response = requests.post(url=config["vmgpu_url"], data=payload, timeout=(15,30))
 
-def capture_to_montage(capture_uuid):
+            # Gestion de la réponse
+            if response.status_code == 200:
+                # Sauvegarde de l'image reçue dans le système de fichiers
+                filepath = Path(capture_path, f"{index}.ia.jpg")
+                logging.debug(filepath)
+                with open(filepath, 'wb') as f:
+                    f.write(response.content)
+
+                # Ouverture de l'image reçue pour traitement
+                with Image.open(filepath) as img:
+                    # Supposer que les bordures noires prennent 124 pixels des côtés après le redimensionnement en 1024x1024
+                    crop_box = (124, 0, 1024 - 124, 1024)  # Exclure les bordures noires latérales
+                    img_cropped = img.crop(crop_box)
+
+                    # Redimensionnement pour obtenir la taille finale de 875x1150
+                    img_final = img_cropped.resize((875, 1150), Image.Resampling.LANCZOS)
+                    
+                    # Enregistrement de l'image finale après recadrage et redimensionnement
+                    final_image_path = Path(capture_path, f"{index}.ia.jpg")
+                    img_final.save(final_image_path)
+                
+                logging.info(f"Image resized and saved successfully: {final_image_path}")
+            else:
+                logging.error(f"Failed to get a successful response: {response.status_code}")
+    
+    except Exception as e:
+        logging.error("An exception occurred while processing the image:")
+        logging.error(traceback.format_exc())
+
+def capture_to_ia(capture_uuid, jason):
+
+    CAPTURE_PATH = Path(CAPTURE_FOLDER, str(capture_uuid))
+    save_ia_image(CAPTURE_PATH, 0, config["prompts"]["A"+ str(jason[0] + 1)])
+    save_ia_image(CAPTURE_PATH, 1, config["prompts"]["B"+ str(jason[1] + 1)])
+    save_ia_image(CAPTURE_PATH, 2, config["prompts"]["C"+ str(jason[2] + 1)])
+    save_ia_image(CAPTURE_PATH, 3, config["prompts"]["D"+ str(jason[3] + 1)])
+
+def processImage(capture_uuid, imgName):
+    CAPTURE_PATH = Path(CAPTURE_FOLDER, str(capture_uuid))
+    img = Image.open(Path(CAPTURE_PATH, imgName))
+    crop = (744, 0, 2232, 1984)
+    img = img.crop(crop)
+    (width, height) = (875, 1150)
+    img = img.resize((width, height))
+    img.save(Path(CAPTURE_PATH,imgName))
+    return img
+
+def processImages(capture_uuid):
+    im1 = processImage(capture_uuid, "0.jpg")
+    im2 = processImage(capture_uuid, "1.jpg")
+    im3 = processImage(capture_uuid, "2.jpg")
+    im4 = processImage(capture_uuid, "3.jpg")
+
+def capture_to_montage(capture_uuid, bIA):
     CAPTURE_PATH = Path(CAPTURE_FOLDER, str(capture_uuid))
     im1 = Image.open(Path(CAPTURE_PATH, "0.jpg"))
     im2 = Image.open(Path(CAPTURE_PATH, "1.jpg"))
     im3 = Image.open(Path(CAPTURE_PATH, "2.jpg"))
     im4 = Image.open(Path(CAPTURE_PATH, "3.jpg"))
-
-    crop = (744, 0, 2232, 1984)
-    im1 = im1.crop(crop)
-    im2 = im2.crop(crop)
-    im3 = im3.crop(crop)
-    im4 = im4.crop(crop)
-
-    # resize
-    (width, height) = (875, 1150)
-    im1 = im1.resize((width, height))
-    im2 = im2.resize((width, height))
-    im3 = im3.resize((width, height))
-    im4 = im4.resize((width, height))
-
-    im1.save(Path(CAPTURE_PATH,"0.jpg"))
-    im2.save(Path(CAPTURE_PATH,"1.jpg"))
-    im3.save(Path(CAPTURE_PATH,"2.jpg"))
-    im4.save(Path(CAPTURE_PATH,"3.jpg"))
+    
+    if bIA:
+        try:
+            imia1 = Image.open(Path(CAPTURE_PATH, "0.ia.jpg"))
+        except FileNotFoundError:
+            imia1 = im1
+            bIA = False
+        try:
+            imia2 = Image.open(Path(CAPTURE_PATH, "1.ia.jpg"))
+        except FileNotFoundError:
+            imia2 = im2
+            bIA = False
+        try:
+            imia3 = Image.open(Path(CAPTURE_PATH, "2.ia.jpg"))
+        except FileNotFoundError:
+            imia3 = im3
+            bIA = False
+        try:
+            imia4 = Image.open(Path(CAPTURE_PATH, "3.ia.jpg"))
+        except FileNotFoundError:
+            imia4 = im4
+            bIA = False
 
     mask = PROCESS_FILE_MASK.resize(im1.size)
     mask = mask.convert("L")
@@ -264,19 +347,25 @@ def capture_to_montage(capture_uuid):
     PROCESS_FILE_BACKGROUND.paste(im2, (915, 20), mask)
     PROCESS_FILE_BACKGROUND.paste(im3, (1810, 20), mask)
     PROCESS_FILE_BACKGROUND.paste(im4, (2705, 20), mask)
-    # noir et blanc
-    PROCESS_FILE_BACKGROUND.paste(im1.convert("L"), (20, 1225), mask)
-    PROCESS_FILE_BACKGROUND.paste(im2.convert("L"), (915, 1225), mask)
-    PROCESS_FILE_BACKGROUND.paste(im3.convert("L"), (1810, 1225), mask)
-    PROCESS_FILE_BACKGROUND.paste(im4.convert("L"), (2705, 1225), mask)
+    # noir et blanc ou IA
+    if bIA:
+        PROCESS_FILE_BACKGROUND.paste(imia1, (20, 1225), mask)
+        PROCESS_FILE_BACKGROUND.paste(imia2, (915, 1225), mask)
+        PROCESS_FILE_BACKGROUND.paste(imia3, (1810, 1225), mask)
+        PROCESS_FILE_BACKGROUND.paste(imia4, (2705, 1225), mask)
+    else:
+        PROCESS_FILE_BACKGROUND.paste(im1.convert("L"), (20, 1225), mask)
+        PROCESS_FILE_BACKGROUND.paste(im2.convert("L"), (915, 1225), mask)
+        PROCESS_FILE_BACKGROUND.paste(im3.convert("L"), (1810, 1225), mask)
+        PROCESS_FILE_BACKGROUND.paste(im4.convert("L"), (2705, 1225), mask)
 
     # logos
     if ADD_LOGO:
-        PROCESS_FILE_BACKGROUND.paste(PROCESS_FILE_LOGO, (LOGO1_POS.x, LOGO1_POS.y), PROCESS_FILE_LOGO)
-        PROCESS_FILE_BACKGROUND.paste(PROCESS_FILE_LOGO, (LOGO2_POS.x, LOGO2_POS.y), PROCESS_FILE_LOGO)
+        PROCESS_FILE_BACKGROUND.paste(PROCESS_FILE_LOGO, (LOGO1_POS['x'], LOGO1_POS['y']), PROCESS_FILE_LOGO)
+        PROCESS_FILE_BACKGROUND.paste(PROCESS_FILE_LOGO, (LOGO2_POS['x'], LOGO2_POS['y']), PROCESS_FILE_LOGO)
 
     # Add margins
-    PROCESS_FILE_MARGIN.paste(PROCESS_FILE_BACKGROUND, (MARGIN.x, MARGIN.y))
+    PROCESS_FILE_MARGIN.paste(PROCESS_FILE_BACKGROUND, (MARGIN['x'], MARGIN['y']))
     PROCESS_FILE_MARGIN.save(Path(CAPTURE_PATH, "print.jpg"), quality=95)
 
 
@@ -309,7 +398,8 @@ def print_image(capture_uuid):
 def main():
     if ON_RASP:
         # init camera
-        camera = init_camera()
+        global CAMERA
+        CAMERA = init_camera()
 
         # Boucle de la mort
         while True:
@@ -328,15 +418,18 @@ def main():
 
                     logging.info("json:" + str(jason))
 
-                    if "cmd" in jason and jason["cmd"] == 1:
+                    if "cmd" in jason and jason["cmd"] == "startShot":
                         bStart = True
             else:
                 if GPIO.input(15):
                     bStart = True
 
             if bStart:
-                capture_uuid = capture(camera)
-                output = capture_to_montage(capture_uuid)
+                capture_uuid = capture(CAMERA)
+                processImages(capture_uuid)
+                if "mode" in jason and jason["mode"] == "ia":
+                    capture_to_ia(capture_uuid, jason["styl"])
+                output = capture_to_montage(capture_uuid, "mode" in jason and jason["mode"] == "ia")
                 if PRINT:
                     print_image(capture_uuid)      
 
@@ -353,3 +446,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+    logging.info("Stop")
+
+

@@ -63,7 +63,11 @@ boolean manageCoinsAndStart(byte mode){
   }else{
     bCarteOK = false;
   }
-  
+
+  // Gestion paiement ok depuis raspi
+  if(checkCmdInitShot()){
+    cents = PRICE_CTS;
+  }
   
   switch(mode){
     case MODE_PAYING:
@@ -89,6 +93,13 @@ boolean manageCoinsAndStart(byte mode){
 
   currentMillis = millis();
   refreshCoinSegment(mode);
+
+  // Gestion lancement séquence depuis raspi
+  if(checkCmdStartShot()){
+    cents = PRICE_CTS;
+    bStart = true;
+  }
+
   if(bStart){
     disableCoinAcceptor();
     coinSegment.setSegments(SEG_BUSY);
@@ -159,7 +170,7 @@ void coinInterrupt(){
   //unsigned long difference = currentMillis - oldInterruptMillis;
   lastInterrupt = millis();
   //if(difference < 135 && difference >125){
-    cents += bCoinEnabled ? 50 : 0;
+    cents += bCoinEnabled ? COIN_MULTI : 0;
   //}
   if(cents > PRICE_CTS){
     cents = PRICE_CTS;

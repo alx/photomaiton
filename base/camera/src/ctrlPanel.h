@@ -6,6 +6,7 @@
 #include <TM1637Display.h>
 #include "constants.h"
 #include "ledmatrix.h"
+#include "jsonCommands.h"
 
 
 boolean manageCoinsAndStart(byte mode);
