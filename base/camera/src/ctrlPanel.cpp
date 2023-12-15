@@ -224,22 +224,19 @@ void errSegment(){
   coinSegment.setSegments(SEG_ERR1);
 }
 
-byte readRotSwitch(byte pin){
+const char* readRotSwitch(byte pin){
   int read = (analogRead(pin) + analogRead(pin) + analogRead(pin) + analogRead(pin)) / 4;
   
-  byte num;
-  if(read < 200){num = 0;}
-  else if(read >=200 && read <300){num = 1;}
-  else if(read >=300 && read <400){num = 2;}
-  else if(read >=400 && read <490){num = 3;}
-  else if(read >=490 && read <630){num = 4;}
-  else if(read >=630 && read <730){num = 5;}
-  else if(read >=730 && read <800){num = 6;}
-  else if(read >=800 && read <890){num = 7;}
-  else if(read >=890 && read <970){num = 8;}
-  else if(read >=970 && read <1008){num = 9;}
-  else if(read >=1008){num = 10;}
-
-  return num;
-
+  if(read < 200){return "A";}
+  else if(read >=200 && read <300){return "B";}
+  else if(read >=300 && read <400){return "C";}
+  else if(read >=400 && read <490){return "D";}
+  else if(read >=490 && read <630){return "E";}
+  else if(read >=630 && read <730){return "F";}
+  else if(read >=730 && read <800){return "G";}
+  else if(read >=800 && read <890){return "H";}
+  else if(read >=890 && read <970){return "I";}
+  else if(read >=970 && read <1008){return "J";}
+  else if(read >=1008){return "K";}
+  return "A";
 }

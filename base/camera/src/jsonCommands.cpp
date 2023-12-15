@@ -1,6 +1,6 @@
 #include "jsonCommands.h"
 
-StaticJsonDocument<500> jason;
+StaticJsonDocument<600> jason;
 String lastCommand = "";
 
 void startShot(bool mode){

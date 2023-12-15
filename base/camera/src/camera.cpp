@@ -27,19 +27,19 @@ Output<AUX_PIN> aux;
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(40, STRIP_PIN, NEO_GRB + NEO_KHZ800);
 
 void auxOn() {
-  #ifdef MEGA
+  //#ifdef MEGA
     aux.write(HIGH);
-  #else
-    aux.write(LOW);
-  #endif
+  //#else
+    //aux.write(LOW);
+  //#endif
 }
 
 void auxOff() {
-  #ifdef MEGA
+  //#ifdef MEGA
     aux.write(LOW);
-  #else
-    aux.write(HIGH);
-  #endif
+  //#else
+    //////////////////////aux.write(HIGH);
+  //#endif
 }
 
 
@@ -77,9 +77,9 @@ void setup() {
     EEPROM.writeBlock(EEPROM_ADRESS, parametres);
   }
   
-  //parametres.mode = MODE_FREE;
-  parametres.mode = MODE_PAYING;
-  parametres.price_cts = 300;
+  //parametres.price_cts = 300;
+  //parametres.mode = MODE_PAYING;
+  parametres.mode = MODE_FREE;
   auxOff();
   disableCoinAcceptor();
   initCoinSegment();

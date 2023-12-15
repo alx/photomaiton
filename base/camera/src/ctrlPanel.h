@@ -23,5 +23,5 @@ boolean isStartLedOn();
 bool readSWStart();
 void incrementCounter();
 void errSegment();
-byte readRotSwitch(byte id);
+const char* readRotSwitch(byte id);
 #endif
