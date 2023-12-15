@@ -4,13 +4,14 @@ import os
 import time
 import datetime
 import sys
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 import cups
 from tempfile import mktemp
 import logging
 from pathlib import Path
 import uuid
 import serial
+from serial.tools import list_ports
 import json
 from io import BytesIO
 import argparse
@@ -47,6 +48,7 @@ logging.basicConfig(
 PHOTO_COUNT = config["photo_count"]  # number of photos to take
 PHOTO_PAUSE = config["photo_pause"]  # in seconds
 ARDUINO_JSON = config["arduino_json"]  # communicate with serial & json (unless with gpio)
+VERTICAL = config["vertical"]  # strip à la verticale
 
 # Folder containing background
 PROCESS_ASSETS_FOLDER = Path(CURRENT_PATH, "assets/")
@@ -75,13 +77,21 @@ except FileNotFoundError:
 # Create logo image if it doesn't exist
 ADD_LOGO = config["add_logo"]
 if ADD_LOGO:
+    LOGO1_NAME = config["logo1_name"]
+    LOGO2_NAME = config["logo2_name"]
     LOGO1_POS = config["logo1_pos"]
     LOGO2_POS = config["logo2_pos"]
     try:
-        PROCESS_FILE_LOGO = Image.open(Path(PROCESS_ASSETS_FOLDER, "logo.png"))
+        PROCESS_FILE_LOGO1 = Image.open(Path(PROCESS_ASSETS_FOLDER, LOGO1_NAME))
+        PROCESS_FILE_LOGO2 = Image.open(Path(PROCESS_ASSETS_FOLDER, LOGO2_NAME))
+        if VERTICAL:
+            PROCESS_FILE_LOGO1 = PROCESS_FILE_LOGO1.rotate(90, expand=True)
+            PROCESS_FILE_LOGO2 = PROCESS_FILE_LOGO2.rotate(90, expand=True)
     except FileNotFoundError:
-        PROCESS_FILE_LOGO = Image.new("RGB", (1, 1), color="white")
-        PROCESS_FILE_LOGO.save(Path(PROCESS_ASSETS_FOLDER, "logo.png"))
+        PROCESS_FILE_LOGO1 = Image.new("RGB", (1, 1), color="white")
+        PROCESS_FILE_LOGO1.save(Path(PROCESS_ASSETS_FOLDER, "logo1.png"))
+        PROCESS_FILE_LOGO2 = Image.new("RGB", (1, 1), color="white")
+        PROCESS_FILE_LOGO2.save(Path(PROCESS_ASSETS_FOLDER, "logo2<.png"))
 
 # Final image for print (dnp ds 40 eat the borders / fond perdu)
 try:
@@ -106,20 +116,43 @@ try:
 except:
     logging.debug("Error importing RPi.GPIO")
 
-# Serial arduino
-if ARDUINO_JSON:
-    try:
-        ser = serial.Serial("/dev/ttyUSB0", 9600, timeout=1)
-        ser.reset_input_buffer()
-    except:
-        logging.debug("Error serial arduino usb0")
-        try:
-            ser = serial.Serial("/dev/ttyUSB1", 9600, timeout=1)
-            ser.reset_input_buffer()
-        except:
-            logging.debug("Error serial arduino usb1")
-
 CAMERA = None
+SERIAL = None # Serial arduino
+
+def connect_to_arduino():
+    def find_arduino_port():
+        # Obtient la liste des ports série disponibles
+        available_ports = list_ports.comports()
+
+        # Itère sur la liste des ports
+        for port in available_ports:
+            try:
+                # Teste la liaison série pour le port actuel
+                SERIAL = serial.Serial(port.device, 9600, timeout=1)
+                SERIAL.reset_input_buffer()
+                # Si la liaison série est réussie, retourne le port
+                return port.device
+            except:
+                logging.debug("Error serial arduino {0}".format(port.device))
+
+        # Retourne None si aucun port n'a été trouvé
+        return None
+
+    # Utilise la fonction pour trouver le port série
+    arduino_port = find_arduino_port()
+
+    if arduino_port:
+        try:
+            SERIAL = serial.Serial(arduino_port, 9600, timeout=1)
+            SERIAL.reset_input_buffer()
+            # Effectue d'autres opérations avec la liaison série établie
+            return SERIAL
+        except:
+            logging.debug("Error connecting to Arduino")
+            return None
+    else:
+        logging.debug("No Arduino port found")
+        return None
 
 def capture_webcam(
     nb_photos=1,
@@ -174,7 +207,7 @@ def init_camera():
         # no camera, try again in 2 seconds
         time.sleep(2)
 
-    # capture pour enclencher le process sinon ça le fait pas
+    # capture pour enclencher le process sinon Ã§a le fait pas
     logging.info("Camera init - first capture")
     CAMERA.capture(gp.GP_CAPTURE_IMAGE)
 
@@ -196,7 +229,7 @@ def capture(camera):
 
     for image_index in range(PHOTO_COUNT):
         # arduino show countdown order
-        ser.write(json.dumps({"cmd": "countdown",}).encode('utf-8'))
+        SERIAL.write(json.dumps({"cmd": "countdown",}).encode('utf-8'))
         time.sleep(PHOTO_PAUSE)
 
         filename = str(image_index) + ".jpg"
@@ -235,7 +268,7 @@ def save_ia_image(capture_path, index, prompt):
             new_size = (int(source.size[0] * ratio), int(source.size[1] * ratio))
             source = source.resize(new_size, Image.Resampling.LANCZOS)
             
-            # Création de l'image finale de fond noir en 512x512
+            # CrÃ©ation de l'image finale de fond noir en 512x512
             final_size = (512, 512)
             final_image = Image.new("RGB", final_size, "black")
             
@@ -245,36 +278,51 @@ def save_ia_image(capture_path, index, prompt):
             
             # Coller l'image source sur l'image finale
             final_image.paste(source, (x, y))
-
-            # Préparation de l'image pour l'envoi
+                
+                
+            # PrÃ©paration de l'image pour l'envoi
             buffered = BytesIO()
             final_image.save(buffered, format="JPEG")
             img_str = base64.b64encode(buffered.getvalue())
 
             # Envoi de l'image par POST
-            payload = {"prompt": prompt["positive"],"negative_prompt": prompt["negative"], "file": img_str}
+            print
+            payload = {"prompt": prompt["positive"],"negative_prompt": prompt["negative"], "loras":json.dumps(prompt["loras"]), "file": img_str}
             logging.debug(config["vmgpu_url"])
             logging.debug(payload)
-            response = requests.post(url=config["vmgpu_url"], data=payload, timeout=(15,30))
+            response = requests.post(url=config["vmgpu_url"], data=payload, timeout=(240,210))
 
-            # Gestion de la réponse
+            # Gestion de la rÃ©ponse
             if response.status_code == 200:
-                # Sauvegarde de l'image reçue dans le système de fichiers
+                # Sauvegarde de l'image reÃ§ue dans le systÃ¨me de fichiers
                 filepath = Path(capture_path, f"{index}.ia.jpg")
                 logging.debug(filepath)
                 with open(filepath, 'wb') as f:
                     f.write(response.content)
 
-                # Ouverture de l'image reçue pour traitement
+                # Ouverture de l'image reÃ§ue pour traitement
                 with Image.open(filepath) as img:
-                    # Supposer que les bordures noires prennent 124 pixels des côtés après le redimensionnement en 1024x1024
-                    crop_box = (124, 0, 1024 - 124, 1024)  # Exclure les bordures noires latérales
+                    # Supposer que les bordures noires prennent 124 pixels des cÃ´tÃ©s aprÃ¨s le redimensionnement en 1024x1024
+                    if VERTICAL:
+                        crop_box = (0, 124, 1024, 900)  # Exclure les bordures noires latÃ©rales
+                    else:
+                        crop_box = (124, 0, 900, 1024)  # Exclure les bordures noires latÃ©rales
                     img_cropped = img.crop(crop_box)
-
-                    # Redimensionnement pour obtenir la taille finale de 875x1150
-                    img_final = img_cropped.resize((875, 1150), Image.Resampling.LANCZOS)
                     
-                    # Enregistrement de l'image finale après recadrage et redimensionnement
+                    # Redimensionnement pour obtenir la taille finale de 875x1150
+                    if VERTICAL:
+                        img_final = img_cropped.resize((1150, 875), Image.Resampling.LANCZOS)
+                    else:
+                        img_final = img_cropped.resize((875, 1150), Image.Resampling.LANCZOS)
+                    
+                    # Save the final image after cropping, resizing, and adding the label
+                    font_size = 64
+                    font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", font_size)
+                    draw = ImageDraw.Draw(img_final) 
+                    if VERTICAL:
+                        draw.text((20, 20), prompt["name"],(255, 255, 255), font=font)
+                    else:
+                        draw.text((20, 1100), prompt["name"],(255, 255, 255), font=font)
                     final_image_path = Path(capture_path, f"{index}.ia.jpg")
                     img_final.save(final_image_path)
                 
@@ -289,10 +337,10 @@ def save_ia_image(capture_path, index, prompt):
 def capture_to_ia(capture_uuid, jason):
 
     CAPTURE_PATH = Path(CAPTURE_FOLDER, str(capture_uuid))
-    save_ia_image(CAPTURE_PATH, 0, config["prompts"]["A"+ str(jason[0] + 1)])
-    save_ia_image(CAPTURE_PATH, 1, config["prompts"]["B"+ str(jason[1] + 1)])
-    save_ia_image(CAPTURE_PATH, 2, config["prompts"]["C"+ str(jason[2] + 1)])
-    save_ia_image(CAPTURE_PATH, 3, config["prompts"]["D"+ str(jason[3] + 1)])
+    save_ia_image(CAPTURE_PATH, 0, config["prompts"]["1"+ str(jason[0])])
+    save_ia_image(CAPTURE_PATH, 1, config["prompts"]["2"+ str(jason[1])])
+    save_ia_image(CAPTURE_PATH, 2, config["prompts"]["3"+ str(jason[2])])
+    save_ia_image(CAPTURE_PATH, 3, config["prompts"]["4"+ str(jason[3])])
 
 def processImage(capture_uuid, imgName):
     CAPTURE_PATH = Path(CAPTURE_FOLDER, str(capture_uuid))
@@ -304,11 +352,28 @@ def processImage(capture_uuid, imgName):
     img.save(Path(CAPTURE_PATH,imgName))
     return img
 
+def processImageVertical(capture_uuid, imgName):
+    CAPTURE_PATH = Path(CAPTURE_FOLDER, str(capture_uuid))
+    img = Image.open(Path(CAPTURE_PATH, imgName))
+    crop = (189, 0, 2787, 1984)
+    img = img.crop(crop)
+    (width, height) = (1150, 875)
+    img = img.resize((width, height))
+    img.save(Path(CAPTURE_PATH,imgName))
+    return img
+
 def processImages(capture_uuid):
-    im1 = processImage(capture_uuid, "0.jpg")
-    im2 = processImage(capture_uuid, "1.jpg")
-    im3 = processImage(capture_uuid, "2.jpg")
-    im4 = processImage(capture_uuid, "3.jpg")
+    if not VERTICAL:
+        im1 = processImage(capture_uuid, "0.jpg")
+        im2 = processImage(capture_uuid, "1.jpg")
+        im3 = processImage(capture_uuid, "2.jpg")
+        im4 = processImage(capture_uuid, "3.jpg")
+    else:
+        im1 = processImageVertical(capture_uuid, "0.jpg")
+        im2 = processImageVertical(capture_uuid, "1.jpg")
+        im3 = processImageVertical(capture_uuid, "2.jpg")
+        im4 = processImageVertical(capture_uuid, "3.jpg")
+
 
 def capture_to_montage(capture_uuid, bIA):
     CAPTURE_PATH = Path(CAPTURE_FOLDER, str(capture_uuid))
@@ -317,28 +382,45 @@ def capture_to_montage(capture_uuid, bIA):
     im3 = Image.open(Path(CAPTURE_PATH, "2.jpg"))
     im4 = Image.open(Path(CAPTURE_PATH, "3.jpg"))
     
+    bIA1 = False
+    bIA2 = False
+    bIA3 = False
+    bIA4 = False
+    
     if bIA:
         try:
             imia1 = Image.open(Path(CAPTURE_PATH, "0.ia.jpg"))
+            bIA1 = True
         except FileNotFoundError:
             imia1 = im1
-            bIA = False
         try:
             imia2 = Image.open(Path(CAPTURE_PATH, "1.ia.jpg"))
+            bIA2 = True
         except FileNotFoundError:
             imia2 = im2
-            bIA = False
         try:
             imia3 = Image.open(Path(CAPTURE_PATH, "2.ia.jpg"))
+            bIA3 = True
         except FileNotFoundError:
             imia3 = im3
-            bIA = False
         try:
             imia4 = Image.open(Path(CAPTURE_PATH, "3.ia.jpg"))
+            bIA4 = True
         except FileNotFoundError:
             imia4 = im4
-            bIA = False
 
+    #rotate si mode horizontal
+    if VERTICAL:
+        im1 = im1.rotate(90, expand=True)
+        im2 = im2.rotate(90, expand=True)
+        im3 = im3.rotate(90, expand=True)
+        im4 = im4.rotate(90, expand=True)
+        if bIA:
+            imia1 = imia1.rotate(90, expand=True)
+            imia2 = imia2.rotate(90, expand=True)
+            imia3 = imia3.rotate(90, expand=True)
+            imia4 = imia4.rotate(90, expand=True)
+    
     mask = PROCESS_FILE_MASK.resize(im1.size)
     mask = mask.convert("L")
 
@@ -347,22 +429,29 @@ def capture_to_montage(capture_uuid, bIA):
     PROCESS_FILE_BACKGROUND.paste(im2, (915, 20), mask)
     PROCESS_FILE_BACKGROUND.paste(im3, (1810, 20), mask)
     PROCESS_FILE_BACKGROUND.paste(im4, (2705, 20), mask)
+    
     # noir et blanc ou IA
-    if bIA:
+    if bIA1:
         PROCESS_FILE_BACKGROUND.paste(imia1, (20, 1225), mask)
-        PROCESS_FILE_BACKGROUND.paste(imia2, (915, 1225), mask)
-        PROCESS_FILE_BACKGROUND.paste(imia3, (1810, 1225), mask)
-        PROCESS_FILE_BACKGROUND.paste(imia4, (2705, 1225), mask)
     else:
         PROCESS_FILE_BACKGROUND.paste(im1.convert("L"), (20, 1225), mask)
+    if bIA2:
+        PROCESS_FILE_BACKGROUND.paste(imia2, (915, 1225), mask)
+    else:
         PROCESS_FILE_BACKGROUND.paste(im2.convert("L"), (915, 1225), mask)
+    if bIA3:
+        PROCESS_FILE_BACKGROUND.paste(imia3, (1810, 1225), mask)
+    else:
         PROCESS_FILE_BACKGROUND.paste(im3.convert("L"), (1810, 1225), mask)
-        PROCESS_FILE_BACKGROUND.paste(im4.convert("L"), (2705, 1225), mask)
+    if bIA4:
+        PROCESS_FILE_BACKGROUND.paste(imia4, (2705, 1225), mask)
+    else:
+        PROCESS_FILE_BACKGROUND.paste(im4.convert("L"), (2705, 1225), mask)     
 
     # logos
     if ADD_LOGO:
-        PROCESS_FILE_BACKGROUND.paste(PROCESS_FILE_LOGO, (LOGO1_POS['x'], LOGO1_POS['y']), PROCESS_FILE_LOGO)
-        PROCESS_FILE_BACKGROUND.paste(PROCESS_FILE_LOGO, (LOGO2_POS['x'], LOGO2_POS['y']), PROCESS_FILE_LOGO)
+        PROCESS_FILE_BACKGROUND.paste(PROCESS_FILE_LOGO1, (LOGO1_POS['x'], LOGO1_POS['y']), PROCESS_FILE_LOGO1)
+        PROCESS_FILE_BACKGROUND.paste(PROCESS_FILE_LOGO2, (LOGO2_POS['x'], LOGO2_POS['y']), PROCESS_FILE_LOGO2)
 
     # Add margins
     PROCESS_FILE_MARGIN.paste(PROCESS_FILE_BACKGROUND, (MARGIN['x'], MARGIN['y']))
@@ -400,6 +489,9 @@ def main():
         # init camera
         global CAMERA
         CAMERA = init_camera()
+        global SERIAL
+        if ARDUINO_JSON:
+            SERIAL = connect_to_arduino()
 
         # Boucle de la mort
         while True:
@@ -408,18 +500,22 @@ def main():
                 # Commande" via serial de l'arduino
                 jason = {}
 
-                if ser.in_waiting > 0:
-                    line = ser.readline().decode("utf-8").rstrip()
+                try:
+                    if SERIAL.in_waiting > 0:
+                        line = SERIAL.readline().decode("utf-8").rstrip()
 
-                    try:
-                        jason = json.loads(line)
-                    except json.decoder.JSONDecodeError:
-                        logging.info("Not json:" + str(line))
+                        try:
+                            jason = json.loads(line)
+                        except json.decoder.JSONDecodeError:
+                            logging.info("Not json:" + str(line))
 
-                    logging.info("json:" + str(jason))
+                        logging.info("json:" + str(jason))
 
-                    if "cmd" in jason and jason["cmd"] == "startShot":
-                        bStart = True
+                        if "cmd" in jason and jason["cmd"] == "startShot":
+                            bStart = True
+                except Exception:
+                    SERIAL.close()
+                    SERIAL = connect_to_arduino()
             else:
                 if GPIO.input(15):
                     bStart = True
@@ -447,5 +543,3 @@ def main():
 if __name__ == "__main__":
     main()
     logging.info("Stop")
-
-
