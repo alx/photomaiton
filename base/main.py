@@ -36,6 +36,10 @@ with open(args.config, "r") as f:
 USB_STICK = config["usb_stick"]  # use of usb storage
 if USB_STICK:
     CURRENT_PATH = os.path.abspath(config["usb_stick_adr"])
+    
+BKPIMG = config["bkpimg"]  # store img in a folder.
+if BKPIMG:
+    BKP_PATH = os.path.abspath(config["bkp_path"])
 
 LOG_FILENAME = Path(CURRENT_PATH, config["log_filename"])
 logging.basicConfig(
@@ -382,32 +386,22 @@ def capture_to_montage(capture_uuid, bIA):
     im3 = Image.open(Path(CAPTURE_PATH, "2.jpg"))
     im4 = Image.open(Path(CAPTURE_PATH, "3.jpg"))
     
-    bIA1 = False
-    bIA2 = False
-    bIA3 = False
-    bIA4 = False
-    
-    if bIA:
-        try:
-            imia1 = Image.open(Path(CAPTURE_PATH, "0.ia.jpg"))
-            bIA1 = True
-        except FileNotFoundError:
-            imia1 = im1
-        try:
-            imia2 = Image.open(Path(CAPTURE_PATH, "1.ia.jpg"))
-            bIA2 = True
-        except FileNotFoundError:
-            imia2 = im2
-        try:
-            imia3 = Image.open(Path(CAPTURE_PATH, "2.ia.jpg"))
-            bIA3 = True
-        except FileNotFoundError:
-            imia3 = im3
-        try:
-            imia4 = Image.open(Path(CAPTURE_PATH, "3.ia.jpg"))
-            bIA4 = True
-        except FileNotFoundError:
-            imia4 = im4
+    try:
+        imia1 = Image.open(Path(CAPTURE_PATH, "0.ia.jpg"))
+    except FileNotFoundError:
+        imia1 = im1.convert("L")
+    try:
+        imia2 = Image.open(Path(CAPTURE_PATH, "1.ia.jpg"))
+    except FileNotFoundError:
+        imia2 = im2.convert("L")
+    try:
+        imia3 = Image.open(Path(CAPTURE_PATH, "2.ia.jpg"))
+    except FileNotFoundError:
+        imia3 = im3.convert("L")
+    try:
+        imia4 = Image.open(Path(CAPTURE_PATH, "3.ia.jpg"))
+    except FileNotFoundError:
+        imia4 = im4.convert("L")
 
     #rotate si mode horizontal
     if VERTICAL:
@@ -415,38 +409,25 @@ def capture_to_montage(capture_uuid, bIA):
         im2 = im2.rotate(90, expand=True)
         im3 = im3.rotate(90, expand=True)
         im4 = im4.rotate(90, expand=True)
-        if bIA:
-            imia1 = imia1.rotate(90, expand=True)
-            imia2 = imia2.rotate(90, expand=True)
-            imia3 = imia3.rotate(90, expand=True)
-            imia4 = imia4.rotate(90, expand=True)
+        imia1 = imia1.rotate(90, expand=True)
+        imia2 = imia2.rotate(90, expand=True)
+        imia3 = imia3.rotate(90, expand=True)
+        imia4 = imia4.rotate(90, expand=True)
     
     mask = PROCESS_FILE_MASK.resize(im1.size)
     mask = mask.convert("L")
 
-    # im1.save('/tmp/0.jpg', quality=95)
+    # Couleur
     PROCESS_FILE_BACKGROUND.paste(im1, (20, 20), mask)
     PROCESS_FILE_BACKGROUND.paste(im2, (915, 20), mask)
     PROCESS_FILE_BACKGROUND.paste(im3, (1810, 20), mask)
     PROCESS_FILE_BACKGROUND.paste(im4, (2705, 20), mask)
     
     # noir et blanc ou IA
-    if bIA1:
-        PROCESS_FILE_BACKGROUND.paste(imia1, (20, 1225), mask)
-    else:
-        PROCESS_FILE_BACKGROUND.paste(im1.convert("L"), (20, 1225), mask)
-    if bIA2:
-        PROCESS_FILE_BACKGROUND.paste(imia2, (915, 1225), mask)
-    else:
-        PROCESS_FILE_BACKGROUND.paste(im2.convert("L"), (915, 1225), mask)
-    if bIA3:
-        PROCESS_FILE_BACKGROUND.paste(imia3, (1810, 1225), mask)
-    else:
-        PROCESS_FILE_BACKGROUND.paste(im3.convert("L"), (1810, 1225), mask)
-    if bIA4:
-        PROCESS_FILE_BACKGROUND.paste(imia4, (2705, 1225), mask)
-    else:
-        PROCESS_FILE_BACKGROUND.paste(im4.convert("L"), (2705, 1225), mask)     
+    PROCESS_FILE_BACKGROUND.paste(imia1, (20, 1225), mask)
+    PROCESS_FILE_BACKGROUND.paste(imia2, (915, 1225), mask)
+    PROCESS_FILE_BACKGROUND.paste(imia3, (1810, 1225), mask)
+    PROCESS_FILE_BACKGROUND.paste(imia4, (2705, 1225), mask)  
 
     # logos
     if ADD_LOGO:
@@ -457,6 +438,18 @@ def capture_to_montage(capture_uuid, bIA):
     PROCESS_FILE_MARGIN.paste(PROCESS_FILE_BACKGROUND, (MARGIN['x'], MARGIN['y']))
     PROCESS_FILE_MARGIN.save(Path(CAPTURE_PATH, "print.jpg"), quality=95)
 
+    #BACKUP
+    if BKPIMG:
+        idPrint = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+        PROCESS_FILE_MARGIN.save(Path(BKP_PATH, idPrint + "_print.jpg"), quality=95)
+        im1.save(Path(BKP_PATH, idPrint + "_1.jpg"), quality=95)
+        im2.save(Path(BKP_PATH, idPrint + "_2.jpg"), quality=95)
+        im3.save(Path(BKP_PATH, idPrint + "_3.jpg"), quality=95)
+        im4.save(Path(BKP_PATH, idPrint + "_4.jpg"), quality=95)
+        imia1.save(Path(BKP_PATH, idPrint + "_1bis.jpg"), quality=95)
+        imia2.save(Path(BKP_PATH, idPrint + "_2bis.jpg"), quality=95)
+        imia3.save(Path(BKP_PATH, idPrint + "_3bis.jpg"), quality=95)
+        imia4.save(Path(BKP_PATH, idPrint + "_4bis.jpg"), quality=95)
 
 def print_image(capture_uuid):
     # impression
