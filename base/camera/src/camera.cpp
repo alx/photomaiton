@@ -12,7 +12,6 @@
 #include <DirectIO.h>
 #include <EEPROMex.h>
 #include <EEPROMVar.h>
-#include <Adafruit_NeoPixel.h>
 #include "constants.h"
 #include "ctrlPanel.h"
 #include "ledmatrix.h"
@@ -21,25 +20,24 @@
 
 // Work variables
 storage parametres;
-bool bClassic = false; // Classic or IA.
 //Aux light
 Output<AUX_PIN> aux;
-Adafruit_NeoPixel strip = Adafruit_NeoPixel(40, STRIP_PIN, NEO_GRB + NEO_KHZ800);
+
 
 void auxOn() {
-  //#ifdef MEGA
+  #ifdef MEGA
     aux.write(HIGH);
-  //#else
-    //aux.write(LOW);
-  //#endif
+  #else
+    aux.write(LOW);
+  #endif
 }
 
 void auxOff() {
-  //#ifdef MEGA
+  #ifdef MEGA
     aux.write(LOW);
-  //#else
-    //////////////////////aux.write(HIGH);
-  //#endif
+  #else
+    aux.write(HIGH);
+  #endif
 }
 
 
@@ -53,15 +51,8 @@ void setup() {
   digitalWrite(COUNT_PIN, LOW);
 
   pinMode(SELECTOR_PIN, INPUT_PULLUP);
-  bClassic = digitalRead(SELECTOR_PIN);
 
-  //Init strip
-  strip.begin();
-  strip.setBrightness(100);
-  for(byte i=0; i<strip.numPixels(); i++) {
-    strip.setPixelColor(i, !bClassic ? 255 : 0, 0, bClassic ? 255 : 0);
-  }
-  strip.show();
+  initStrip();
   
   EEPROM.readBlock(EEPROM_ADRESS, parametres);
   
@@ -72,40 +63,36 @@ void setup() {
     parametres.totStrip = 0;
     parametres.mode = MODE_PAYING;
     parametres.price_cts = 300;
-    parametres.free_price_cts = 100;
     parametres.bRunning = false;
     EEPROM.writeBlock(EEPROM_ADRESS, parametres);
   }
   
-  //parametres.price_cts = 300;
+  //parametres.price_cts = 400;
   //parametres.mode = MODE_PAYING;
   parametres.mode = MODE_FREE;
+  
   auxOff();
   disableCoinAcceptor();
-  initCoinSegment();
   initLedMatrix();
-  enableCoinAcceptor(parametres.mode);
+  initCoinSegment();
+  enableCoinAcceptor(parametres);
   showSmiley();
 }
 
 void loop() {
-  // Blue or red pill
-  if(bClassic != digitalRead(SELECTOR_PIN)){
-    bClassic = !bClassic;
-    for(byte i=0; i<strip.numPixels(); i++) {
-      strip.setPixelColor(i, !bClassic ? 255 : 0, 0, bClassic ? 255 : 0);
-    }
-    strip.show();
-  }
+  
+  refreshStrip();
 
+  //Check for updates from raspi.
+  //checkUpdate();
   // If coin acceptor OK and clic start button.
-  if(manageCoinsAndStart(parametres.mode)) {
+  if(manageCoinsAndStart(parametres)) {
     auxOn();
     /*parametres.totStrip += 1;
     parametres.bRunning = true;
     EEPROM.updateBlock(EEPROM_ADRESS, parametres);*/
     #ifdef JSON
-      startShot(bClassic);
+      startShot();
     #else
       digitalWrite(NUMERIC_PIN, HIGH); // start raspberry pi sequence
       delay(100);
@@ -136,7 +123,7 @@ void loop() {
     delay(2000);
     auxOff();
     showSmiley();
-    enableCoinAcceptor(parametres.mode);
+    enableCoinAcceptor(parametres);
     /*parametres.bRunning = false;
     EEPROM.updateBlock(EEPROM_ADRESS, parametres);*/
   }

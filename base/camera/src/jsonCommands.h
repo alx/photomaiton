@@ -5,8 +5,9 @@
 #include "constants.h"
 #include "ctrlPanel.h"
 
-void startShot(bool mode);
+void startShot();
 bool checkCmdInitShot();
 bool checkCmdStartShot();
 bool checkCmdCountdown();
+bool checkUpdate();
 #endif

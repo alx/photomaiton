@@ -3,7 +3,8 @@
 StaticJsonDocument<600> jason;
 String lastCommand = "";
 
-void startShot(bool mode){
+void startShot(){
+    bool mode = digitalRead(SELECTOR_PIN);
     jason.clear();
     jason["cmd"] = "startShot";
     jason["pay"] = 0;//0 =cash, 1=cb
@@ -77,3 +78,14 @@ void sendSerial(bool mode){
     serializeJson(jason, Serial);
     Serial.println();
 };
+
+bool checkUpdate(){
+    /*checkAvailableCommand();
+    if(lastCommand == "update"){
+        lastCommand = "";
+        Serial.println(String(jason["id"].as<String>()));
+        Serial.println(String(jason["value"].as<String>()));
+        return true;
+    }*/
+    return false;
+}

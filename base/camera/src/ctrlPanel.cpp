@@ -2,6 +2,7 @@
 
 
 volatile int cents = 0;
+int PRICE_CTS = 0;
 
 const uint8_t SEG_FREE[] = {
   SEG_A | SEG_F | SEG_G | SEG_E,                   // F
@@ -33,11 +34,14 @@ unsigned long currentMillis;
 unsigned long lastInterrupt = 0;
 bool bRefreshSeg = true;
 volatile bool bCarteOK = false;
-
 unsigned long startInterruptCB = 0;
 
-boolean manageCoinsAndStart(byte mode){
+Adafruit_NeoPixel strip = Adafruit_NeoPixel(169, STRIP_PIN, NEO_GRB + NEO_KHZ800);
+bool bClassic = digitalRead(SELECTOR_PIN);
+
+boolean manageCoinsAndStart(struct storage parametres){
   boolean bStart = false;
+  PRICE_CTS = parametres.price_cts;
 
   // Check millis of board that manage credit card reader
   if(bCarteOK == true && cents == 0){
@@ -52,7 +56,7 @@ boolean manageCoinsAndStart(byte mode){
     if(stopInterruptCB - startInterruptCB < 50){
       cents = 0;
     }else{
-      cents = PRICE_CTS;
+      cents = parametres.price_cts;
     }
     if(stopInterruptCB - startInterruptCB > 50){
       Serial.print(F("CB interrupt"));
@@ -66,37 +70,27 @@ boolean manageCoinsAndStart(byte mode){
 
   // Gestion paiement ok depuis raspi
   if(checkCmdInitShot()){
-    cents = PRICE_CTS;
+    cents = parametres.price_cts;
   }
-  
-  switch(mode){
-    case MODE_PAYING:
-      //if(cents >= PRICE_CTS || bCarteOK){
-      if(cents >= PRICE_CTS){
-        disableCoinAcceptor();
-        showArrowDown();
-        setCoinDigit(0);
-        bStart = !startBtn.read();
-      }
-      break;
-    case MODE_FREE_PRICE:
-      if(cents >= FREE_PRICE_CTS){
-        showArrowDown();
-        bStart = !startBtn.read();
-      }
-      break;
-    case MODE_FREE:
-      showArrowDown();
-      bStart = !startBtn.read();
-      break;
+  if(parametres.mode == MODE_FREE){
+    cents = parametres.price_cts;
+  }
+
+  if(cents >= parametres.price_cts){
+    if(parametres.mode == MODE_PAYING){
+      disableCoinAcceptor();
+      setCoinDigit(0);
+    }
+    showArrowDown();
+    bStart = !startBtn.read();
   }
 
   currentMillis = millis();
-  refreshCoinSegment(mode);
+  refreshCoinSegment(parametres);
 
   // Gestion lancement séquence depuis raspi
   if(checkCmdStartShot()){
-    cents = PRICE_CTS;
+    cents = parametres.price_cts;
     bStart = true;
   }
 
@@ -106,6 +100,7 @@ boolean manageCoinsAndStart(byte mode){
     incrementCounter();
   }
 
+  
   return bStart;
 }
 
@@ -134,14 +129,12 @@ void setCoinDigit(int number){
 /*
  * Refresh if needed according to cents the segment.
  */
-void refreshCoinSegment(byte mode){
+void refreshCoinSegment(struct storage parametres){
 
   //N'affiche que la précision à 0.5
   if(currentMillis - lastInterrupt  > 200){
-    if(mode == MODE_PAYING){
-      setCoinDigit(PRICE_CTS - cents);
-    } else if (mode == MODE_FREE_PRICE){
-      setCoinDigit(cents);
+    if(parametres.mode == MODE_PAYING){
+      setCoinDigit(parametres.price_cts - cents);
     } else {
       coinSegment.setSegments(SEG_FREE);
     }
@@ -193,8 +186,8 @@ void disableCoinAcceptor(){
   bRefreshSeg = true;
 }
 
-void enableCoinAcceptor(byte mode){
-  if(mode != MODE_FREE){
+void enableCoinAcceptor(struct storage parametres){
+  if(parametres.mode != MODE_FREE){
     pinMode(COIN_PIN, INPUT_PULLUP);
     attachInterrupt(digitalPinToInterrupt(COIN_PIN), coinInterrupt, FALLING);
     pinMode(CB_PIN, INPUT);
@@ -203,7 +196,7 @@ void enableCoinAcceptor(byte mode){
     cents = 0;
   }
   bRefreshSeg = true;
-  refreshCoinSegment(mode);
+  refreshCoinSegment(parametres);
 }
 
 boolean isCoinEnabled(){
@@ -227,8 +220,8 @@ void errSegment(){
 const char* readRotSwitch(byte pin){
   int read = (analogRead(pin) + analogRead(pin) + analogRead(pin) + analogRead(pin)) / 4;
   
-  if(read < 200){return "A";}
-  else if(read >=200 && read <300){return "B";}
+  if(read < 220){return "A";}
+  else if(read >=220 && read <300){return "B";}
   else if(read >=300 && read <400){return "C";}
   else if(read >=400 && read <490){return "D";}
   else if(read >=490 && read <630){return "E";}
@@ -239,4 +232,87 @@ const char* readRotSwitch(byte pin){
   else if(read >=970 && read <1008){return "J";}
   else if(read >=1008){return "K";}
   return "A";
+}
+
+byte readRotSwitchByte(byte pin){
+  int read = (analogRead(pin) + analogRead(pin) + analogRead(pin) + analogRead(pin)) / 4;
+  
+  if(read < 220){return 0;}
+  else if(read >=220 && read <300){return 1;}
+  else if(read >=300 && read <400){return 2;}
+  else if(read >=400 && read <490){return 3;}
+  else if(read >=490 && read <630){return 4;}
+  else if(read >=630 && read <730){return 5;}
+  else if(read >=730 && read <800){return 6;}
+  else if(read >=800 && read <890){return 7;}
+  else if(read >=890 && read <970){return 8;}
+  else if(read >=970 && read <1008){return 9;}
+  else if(read >=1008){return 10;}
+  return 0;
+}
+
+void initStrip(){
+  strip.begin();
+  strip.setBrightness(255);
+  
+  for(byte i=0; i<strip.numPixels(); i++) {
+    strip.setPixelColor(i, !bClassic ? 255 : 0, 0, bClassic ? 255 : 0);
+  }
+  strip.show();
+}
+
+void refreshStrip(){
+
+  // Blue or red pill
+  if(bClassic != digitalRead(SELECTOR_PIN)){
+    bClassic = !bClassic;
+    for(byte i=0; i<40; i++) {
+      strip.setPixelColor(i, !bClassic ? 255 : 0, 0, bClassic ? 255 : 0);
+    }
+    strip.show();
+  }
+
+  // Refresh infos panel
+  byte pose1 = readRotSwitchByte(ROTSW1_PIN);
+  byte pose2 = readRotSwitchByte(ROTSW2_PIN);
+  byte pose3 = readRotSwitchByte(ROTSW3_PIN);
+  byte pose4 = readRotSwitchByte(ROTSW4_PIN);
+
+  for(byte i = 40; i <169;i++){
+    strip.setPixelColor(i, 255,255,255);
+  }
+
+  // Pose 4
+  for(byte i = 40; i < 51;i++){
+    strip.setPixelColor(i, 255,255,255);
+    if(i == 40 + pose4){
+      strip.setPixelColor(i, 255,0,0);
+    }
+  }
+
+  // Pose 2
+  for(byte i = 54; i <65;i++){
+    strip.setPixelColor(i, 255,255,255);
+    if(i == 54 + pose2){
+      strip.setPixelColor(i, 255,0,0);
+    }
+  }
+
+  // Pose 1
+  for(byte i = 102; i <113;i++){
+    strip.setPixelColor(i, 255,255,255);
+    if(i == 112 - pose1){
+      strip.setPixelColor(i, 255,0,0);
+    }
+  }
+
+  // Pose 3
+  for(byte i = 116; i <127;i++){
+    strip.setPixelColor(i, 255,255,255);
+    if(i == 126 - pose3){
+      strip.setPixelColor(i, 255,0,0);
+    }
+  }
+  
+  strip.show();
 }
