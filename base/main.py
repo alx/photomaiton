@@ -19,6 +19,7 @@ import traceback
 import base64
 import requests
 import usb.core
+import db
 
 CURRENT_PATH = os.path.dirname(os.path.abspath(__file__))
 parser = argparse.ArgumentParser(description="Read config file path")
@@ -514,7 +515,18 @@ def main():
                     bStart = True
 
             if bStart:
+                
+
                 capture_uuid = capture(CAMERA)
+
+                # Insert table shot
+                try:
+                    conn = db.connect_database()
+                    db.insert_shot(conn, "mode" in jason and jason["mode"] == "ia", jason["pay"], str(capture_uuid), config["id_booth"])
+                    conn.close()
+                except Exception as e:
+                    logging.error("DBFUCK:" + str(e))
+
                 processImages(capture_uuid)
                 if "mode" in jason and jason["mode"] == "ia":
                     capture_to_ia(capture_uuid, jason["styl"])
