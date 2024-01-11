@@ -3,13 +3,15 @@
 
 import os
 import time
-import pi3d
+import cv2
+import numpy as np
 from PIL import Image
 
-# RÃ©pertoire d'images et taille de l'Ã©cran
+# Répertoire d'images et taille de l'écran
 image_directory = '/home/minutepapillons/BkpImg/Dada'
-screen_width = 800 #1920
-screen_height = 600 #1080
+screen_width = 1280
+screen_height = 720
+
 
 def get_image_list(directory):
     image_list = sorted(os.listdir(directory), key=lambda x: os.path.getmtime(os.path.join(directory, x)), reverse=True)
@@ -18,53 +20,47 @@ def get_image_list(directory):
 def remove_old_images(directory):
     image_list = get_image_list(directory)
     
-    # Conserver seulement la derniÃ¨re image
+    # Supprimer toutes les images sauf la plus récente
     for i in range(1, len(image_list)):
         os.remove(image_list[i])
 
-# Initialisation de l'affichage
-display = pi3d.Display.create(w=screen_width, h=screen_height, background=(0, 0, 0, 255))
-
-# CrÃ©ation de l'image sprite avec dimensions adaptÃ©es
-def create_image_sprite(image_path, screen_width, screen_height):
-    image = Image.open(image_path)
-    #image.thumbnail((screen_width, screen_height))
-    w, h = image.size
-    print(w)
-    print(h)
-    x_pos = (screen_width - w) / 2
-    y_pos = (screen_height - h) / 2
-    image_texture = pi3d.Texture(image_path)
-    shader = pi3d.Shader("uv_flat")
-    return pi3d.ImageSprite(image_texture, w=w, h=h, x=0, y=0, z=5, shader=shader)
+# Création de la fenêtre d'affichage
+cv2.namedWindow("La Voix de son Maître", cv2.WND_PROP_FULLSCREEN)
+#cv2.resizeWindow("La Voix de son Maître", screen_width, screen_height)
+cv2.setWindowProperty("La Voix de son Maître", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
 
 # Boucle principale
-keyboard = pi3d.Keyboard()
-while display.loop_running():
-
-    if keyboard.read() == ord('q'):  # Vérifie si la touche pressée est 'q'
-        display.destroy()  # Quitte le mode plein écran et détruit la fenêtre
-        break
+while True:
+    # Suppression des anciennes images à chaque boucle principale
+    #remove_old_images(image_directory)
     
-    # Suppression des anciennes images Ã  chaque boucle principale
-    remove_old_images(image_directory)
-    
-    # RÃ©cupÃ©ration de la liste des images
+    # Récupération de la liste des images
     image_list = get_image_list(image_directory)
 
-    # Chargement de l'image la plus rÃ©cente
-    image_path = image_list[0]
-    print(image_path)
-    image_sprite = create_image_sprite(image_path, screen_width, screen_height)
+    # Charger la nouvelle image la plus récente
+    if len(image_list) > 0:
+        image_path = image_list[0]
 
-    display.clear()
+        # Création d'une image noire pour le fond
+        image = Image.open(image_path)
+        #image = image.rotate(-90)
+        background = Image.new("RGB", (screen_width, screen_height), color="black")
+        background.paste(image, (50, 0))
+        background.save(image_path, quality=95)
 
-    # Affichage de l'image
-    image_sprite.draw()
+        image = cv2.imread(image_path)
+        cv2.imshow("La Voix de son Maître", image)
 
-    # Attente de 5 secondes avant de passer Ã  la prochaine boucle
-    time.sleep(5)
+        key = cv2.waitKey(5000)
+        if key == ord('q'):
+            break
+    
 
-keyboard.close()
+        
+    # Attente de 5 secondes avant de passer à la prochaine image
+    #cv2.waitKey(5000)
+    if len(image_list) > 1:
+       os.remove(image_list[0])
 
+cv2.destroyAllWindows() 

@@ -6,12 +6,11 @@
  * RTC DS3231 (3.3v, SDA, SCL, empty, GND). Adress: 0x68
  */
  
-//#include <MemoryUsage.h>
 //STACK_DECLARE
 #include <Arduino.h>
-#include <DirectIO.h>
 #include <EEPROMex.h>
 #include <EEPROMVar.h>
+#include <MemoryUsage.h>
 #include "constants.h"
 #include "ctrlPanel.h"
 #include "ledmatrix.h"
@@ -20,31 +19,34 @@
 
 // Work variables
 storage parametres;
-//Aux light
-Output<AUX_PIN> aux;
-
 
 void auxOn() {
   #ifdef MEGA
-    aux.write(HIGH);
+    digitalWrite(AUX_PIN, HIGH);
   #else
-    aux.write(LOW);
+    digitalWrite(AUX_PIN, LOW);
   #endif
 }
 
 void auxOff() {
   #ifdef MEGA
-    aux.write(LOW);
+    digitalWrite(AUX_PIN, LOW);
   #else
-    aux.write(HIGH);
+    digitalWrite(AUX_PIN, HIGH);
   #endif
 }
 
 
 void setup() {
 
-  Serial.begin(9600);
+  Serial.begin(115200);
   Serial.println(F("Start"));
+
+  //Aux light
+  pinMode(AUX_PIN, OUTPUT);
+  auxOff();
+
+  pinMode(START_BTN_PIN, INPUT_PULLUP);
 
   // Mechanical counter
   pinMode(COUNT_PIN, OUTPUT);
@@ -69,9 +71,8 @@ void setup() {
   
   //parametres.price_cts = 400;
   //parametres.mode = MODE_PAYING;
-  parametres.mode = MODE_FREE;
+  //parametres.mode = MODE_FREE;
   
-  auxOff();
   disableCoinAcceptor();
   initLedMatrix();
   initCoinSegment();
@@ -79,15 +80,39 @@ void setup() {
   showSmiley();
 }
 
+unsigned long lastRefresh = 0;
 void loop() {
-  
-  refreshStrip();
+  //FREERAM_PRINT;
 
+  checkAvailableCommand();
+
+  unsigned long currMillis = millis();
+  if(currMillis - lastRefresh > 200){
+    refreshStrip();
+    lastRefresh = currMillis;
+  }
+    
   //Check for updates from raspi.
-  //checkUpdate();
+  if(checkCmd(5)){ // set free mode
+    parametres.mode = MODE_FREE;
+    EEPROM.updateBlock(EEPROM_ADRESS, parametres);
+    enableCoinAcceptor(parametres);
+  }
+
+  if(checkCmd(6)){ // set paying mode
+    parametres.price_cts = 300;
+    parametres.mode = MODE_PAYING;
+    EEPROM.updateBlock(EEPROM_ADRESS, parametres);
+    enableCoinAcceptor(parametres);
+  }
+
   // If coin acceptor OK and clic start button.
   if(manageCoinsAndStart(parametres)) {
     auxOn();
+    byte pose1 = readRotSwitchByte(ROTSW1_PIN);
+    byte pose2 = readRotSwitchByte(ROTSW2_PIN);
+    byte pose3 = readRotSwitchByte(ROTSW3_PIN);
+    byte pose4 = readRotSwitchByte(ROTSW4_PIN);
     /*parametres.totStrip += 1;
     parametres.bRunning = true;
     EEPROM.updateBlock(EEPROM_ADRESS, parametres);*/
@@ -99,7 +124,26 @@ void loop() {
       digitalWrite(NUMERIC_PIN, LOW);
     #endif
 
+    bool bClassic = digitalRead(SELECTOR_PIN);
+
     for(byte i = 0; i < 4;i++){
+      if(!bClassic){
+        lightOne(112 - pose1, 255, 0, 0);
+        lightOne(54 + pose2, 255, 0, 0);
+        lightOne(126 - pose3, 255, 0, 0);
+        lightOne(40 + pose4, 255, 0, 0);
+        if(i == 0){
+          lightOne(112 - pose1, 0, 255, 0);
+        } else if(i == 1){
+          lightOne(54 + pose2, 0, 255, 0);
+        } else if(i == 2){
+          lightOne(126 - pose3, 0, 255, 0);
+        } else {
+          lightOne(40 + pose4, 0, 255, 0);
+        }
+        fastLedShow();
+      }
+      
       #ifdef JSON
         unsigned long currMillis = millis();
         unsigned long timeout = currMillis;
@@ -109,6 +153,7 @@ void loop() {
             // si pas de réponse aprés timeout 3sec, continue.
             break;
           }
+          checkAvailableCommand();
         }
       #endif  
       showCountdown();
@@ -121,7 +166,23 @@ void loop() {
     }
     // 2 more sec before switching aux off.
     delay(2000);
-    auxOff();
+    //auxOff();
+    //showCross();
+    unsigned long currMillis = millis();
+    unsigned long timeout = currMillis;
+    unsigned long animRefresh = 0;
+    while(!checkCmdEndWait()){
+      currMillis = millis();
+      if(currMillis - animRefresh > 200){
+        animRefresh = currMillis;
+        waitAnim();
+      }
+      if(currMillis - timeout > 180000){
+        // si pas de réponse aprés timeout 3mn, continue.
+        break;
+      }
+      checkAvailableCommand();
+    }
     showSmiley();
     enableCoinAcceptor(parametres);
     /*parametres.bRunning = false;

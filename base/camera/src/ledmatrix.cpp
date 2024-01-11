@@ -63,3 +63,30 @@ void showSmiley()
     ledMatrix.setRow(0,i,IMAGES[0][i]);
   }
 }
+
+void showCross()
+{
+  for (int i = 0; i < 8; i++)  
+  {
+    ledMatrix.setRow(0,i,CROSS[i]);
+  }
+}
+
+void displayImage(uint64_t image) {
+  for (int i = 0; i < 8; i++) {
+    byte row = (image >> i * 8) & 0xFF;
+    for (int j = 0; j < 8; j++) {
+      ledMatrix.setLed(0, i, j, bitRead(row, j));
+    }
+  }
+}
+int frame = 0;
+void waitAnim(){
+   uint64_t image;
+  memcpy_P(&image, &ANIM[frame], 8);
+
+  displayImage(image);
+  if (++frame >= ANIM_LEN ) {
+    frame = 0;
+  }
+}

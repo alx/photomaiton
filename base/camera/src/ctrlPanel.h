@@ -2,9 +2,8 @@
 #ifndef ctrlpanel_h
 #define ctrlpanel_h
 
-#include <DirectIO.h>
 #include <TM1637Display.h>
-#include <Adafruit_NeoPixel.h>
+#include <FastLED.h>
 #include "constants.h"
 #include "ledmatrix.h"
 #include "jsonCommands.h"
@@ -28,4 +27,6 @@ const char* readRotSwitch(byte id);
 byte readRotSwitchByte(byte id);
 void initStrip();
 void refreshStrip();
+void lightOne(byte i, byte r, byte g, byte b);
+void fastLedShow();
 #endif

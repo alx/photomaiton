@@ -27,8 +27,6 @@ const uint8_t SEG_ERR1[] = {
 
 TM1637Display coinSegment(COIN_SEGMENT_CLK_PIN, COIN_SEGMENT_DIO_PIN);
 
-// btn Start + LED
-Input<START_BTN_PIN> startBtn(true);
 bool bCoinEnabled = false;
 unsigned long currentMillis;
 unsigned long lastInterrupt = 0;
@@ -36,10 +34,11 @@ bool bRefreshSeg = true;
 volatile bool bCarteOK = false;
 unsigned long startInterruptCB = 0;
 
-Adafruit_NeoPixel strip = Adafruit_NeoPixel(169, STRIP_PIN, NEO_GRB + NEO_KHZ800);
+CRGB strip[169];
 bool bClassic = digitalRead(SELECTOR_PIN);
 
 boolean manageCoinsAndStart(struct storage parametres){
+  
   boolean bStart = false;
   PRICE_CTS = parametres.price_cts;
 
@@ -82,7 +81,7 @@ boolean manageCoinsAndStart(struct storage parametres){
       setCoinDigit(0);
     }
     showArrowDown();
-    bStart = !startBtn.read();
+    bStart = !digitalRead(START_BTN_PIN);
   }
 
   currentMillis = millis();
@@ -98,6 +97,7 @@ boolean manageCoinsAndStart(struct storage parametres){
     disableCoinAcceptor();
     coinSegment.setSegments(SEG_BUSY);
     incrementCounter();
+    cents = 0;
   }
 
   
@@ -204,7 +204,7 @@ boolean isCoinEnabled(){
 }
 
 bool readSWStart(){
-  return startBtn.read();
+  return digitalRead(START_BTN_PIN);
 }
 
 void incrementCounter(){
@@ -220,8 +220,8 @@ void errSegment(){
 const char* readRotSwitch(byte pin){
   int read = (analogRead(pin) + analogRead(pin) + analogRead(pin) + analogRead(pin)) / 4;
   
-  if(read < 220){return "A";}
-  else if(read >=220 && read <300){return "B";}
+  if(read < 205){return "A";}
+  else if(read >=205 && read <300){return "B";}
   else if(read >=300 && read <400){return "C";}
   else if(read >=400 && read <490){return "D";}
   else if(read >=490 && read <630){return "E";}
@@ -236,9 +236,10 @@ const char* readRotSwitch(byte pin){
 
 byte readRotSwitchByte(byte pin){
   int read = (analogRead(pin) + analogRead(pin) + analogRead(pin) + analogRead(pin)) / 4;
-  
-  if(read < 220){return 0;}
-  else if(read >=220 && read <300){return 1;}
+  //Serial.println(read);
+
+  if(read < 205){return 0;}
+  else if(read >=205 && read <300){return 1;}
   else if(read >=300 && read <400){return 2;}
   else if(read >=400 && read <490){return 3;}
   else if(read >=490 && read <630){return 4;}
@@ -248,71 +249,71 @@ byte readRotSwitchByte(byte pin){
   else if(read >=890 && read <970){return 8;}
   else if(read >=970 && read <1008){return 9;}
   else if(read >=1008){return 10;}
+
   return 0;
 }
 
 void initStrip(){
-  strip.begin();
-  strip.setBrightness(255);
-  
-  for(byte i=0; i<strip.numPixels(); i++) {
-    strip.setPixelColor(i, !bClassic ? 255 : 0, 0, bClassic ? 255 : 0);
+  FastLED.addLeds<NEOPIXEL, STRIP_PIN>(strip, NB_LEDS);    
+
+  for(byte i = 0; i < NB_LEDS; i++) {
+    strip[i] = CRGB( !bClassic ? 255 : 0, 0, bClassic ? 255 : 0);
   }
-  strip.show();
+  FastLED.show(); 
 }
 
 void refreshStrip(){
 
-  // Blue or red pill
-  if(bClassic != digitalRead(SELECTOR_PIN)){
-    bClassic = !bClassic;
-    for(byte i=0; i<40; i++) {
-      strip.setPixelColor(i, !bClassic ? 255 : 0, 0, bClassic ? 255 : 0);
-    }
-    strip.show();
+  for(byte i = 40; i <169;i++){
+    strip[i] = CRGB(255, 255, 255);
   }
+
+    // Blue or red pill
+  //if(bClassic != digitalRead(SELECTOR_PIN)){
+    bClassic = digitalRead(SELECTOR_PIN);
+    for(byte i=0; i<40; i++) {
+      strip[i] = CRGB( !bClassic ? 255 : 0, 0, bClassic ? 255 : 0);
+    }
+
+    for(byte i=65; i<102; i++) {
+      strip[i] = CRGB( !bClassic ? 255 : 0, 0, bClassic ? 255 : 0);
+    }
+    for(byte i=51; i<54; i++) {
+      strip[i] = CRGB( !bClassic ? 255 : 0, 0, bClassic ? 255 : 0);
+    }
+    for(byte i=113; i<116; i++) {
+      strip[i] = CRGB( !bClassic ? 255 : 0, 0, bClassic ? 255 : 0);
+    }
+  //}
 
   // Refresh infos panel
   byte pose1 = readRotSwitchByte(ROTSW1_PIN);
   byte pose2 = readRotSwitchByte(ROTSW2_PIN);
   byte pose3 = readRotSwitchByte(ROTSW3_PIN);
   byte pose4 = readRotSwitchByte(ROTSW4_PIN);
+  
+  if(!bClassic){
+    // Pose 4
+    strip[40 + pose4] = CRGB(255, 0, 0);
 
-  for(byte i = 40; i <169;i++){
-    strip.setPixelColor(i, 255,255,255);
-  }
+    // Pose 2
+    strip[54 + pose2] = CRGB(255, 0, 0);
 
-  // Pose 4
-  for(byte i = 40; i < 51;i++){
-    strip.setPixelColor(i, 255,255,255);
-    if(i == 40 + pose4){
-      strip.setPixelColor(i, 255,0,0);
-    }
-  }
+    // Pose 1
+    strip[112 - pose1] = CRGB(255, 0, 0);
 
-  // Pose 2
-  for(byte i = 54; i <65;i++){
-    strip.setPixelColor(i, 255,255,255);
-    if(i == 54 + pose2){
-      strip.setPixelColor(i, 255,0,0);
-    }
-  }
-
-  // Pose 1
-  for(byte i = 102; i <113;i++){
-    strip.setPixelColor(i, 255,255,255);
-    if(i == 112 - pose1){
-      strip.setPixelColor(i, 255,0,0);
-    }
-  }
-
-  // Pose 3
-  for(byte i = 116; i <127;i++){
-    strip.setPixelColor(i, 255,255,255);
-    if(i == 126 - pose3){
-      strip.setPixelColor(i, 255,0,0);
-    }
+    // Pose 3
+    strip[126 - pose3] = CRGB(255, 0, 0);
   }
   
-  strip.show();
+  
+  FastLED.show(); 
+}
+
+void lightOne(byte i, byte r, byte g, byte b){
+  strip[i] = CRGB(r, g, b);
+}
+
+void fastLedShow(){
+  FastLED.show();
 }

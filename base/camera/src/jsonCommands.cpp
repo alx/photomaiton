@@ -1,7 +1,7 @@
 #include "jsonCommands.h"
 
-StaticJsonDocument<600> jason;
-String lastCommand = "";
+StaticJsonDocument<400> jason;
+int lastCommand = 0;
 
 void startShot(){
     bool mode = digitalRead(SELECTOR_PIN);
@@ -22,49 +22,53 @@ void startShot(){
 
 void checkAvailableCommand(){
     if (Serial.available()) {
-        char incomingData[200];  // json de 200 caractéres max
-        int bytesRead = Serial.readBytesUntil('\n', incomingData, sizeof(incomingData));
-        incomingData[bytesRead] = '\0'; 
-
-        DeserializationError error = deserializeJson(jason, incomingData);
-
-        if (!error) {
-            lastCommand = jason["cmd"].as<String>();
+        //Serial.print("R=");
+        int cmd = Serial.read() - '0';
+        if(cmd >= 0){
+            //Serial.println(cmd);
+            lastCommand = cmd;
         }
+        
     }
 }
 
 bool checkCmdStartShot(){
-    checkAvailableCommand();
-    if(lastCommand == "startShot"){
-        lastCommand = "";
+    if(lastCommand == 1){
+        //lightOne(2);
+        lastCommand = 0;
         return true;
     }
     return false;
 }
 
 bool checkCmdInitShot(){
-    checkAvailableCommand();
-    if(lastCommand == "initShot"){
-        lastCommand = "";
+    if(lastCommand == 2){
+        //lightOne(2);
+        lastCommand = 0;
         return true;
     }
     return false;
 }
 
 bool checkCmdCountdown(){
-    checkAvailableCommand();
-    if(lastCommand == "countdown"){
-        lastCommand = "";
+    if(lastCommand == 3){
+        lastCommand = 0;
         return true;
     }
     return false;
 }
 
-bool checkCmd(String cmd){
-    checkAvailableCommand();
+bool checkCmdEndWait(){
+    if(lastCommand == 4){
+        lastCommand = 0;
+        return true;
+    }
+    return false;
+}
+
+bool checkCmd(int cmd){
     if(lastCommand == cmd){
-        lastCommand = "";
+        lastCommand = 0;
         return true;
     }
     return false;
@@ -78,14 +82,3 @@ void sendSerial(bool mode){
     serializeJson(jason, Serial);
     Serial.println();
 };
-
-bool checkUpdate(){
-    /*checkAvailableCommand();
-    if(lastCommand == "update"){
-        lastCommand = "";
-        Serial.println(String(jason["id"].as<String>()));
-        Serial.println(String(jason["value"].as<String>()));
-        return true;
-    }*/
-    return false;
-}

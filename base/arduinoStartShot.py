@@ -31,12 +31,8 @@ except:
         logging.debug("Error serial arduino usb1")
 
 def main():
-    cmd = {
-    "cmd": "startShot",
-    }
-
     # convert into JSON:
-    jason = json.dumps(cmd).encode('utf-8')
+    jason = "1".encode('utf-8')
     ser.write(jason)
     return 1
 

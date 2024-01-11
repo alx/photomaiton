@@ -53,7 +53,7 @@ logging.basicConfig(
 PHOTO_COUNT = config["photo_count"]  # number of photos to take
 PHOTO_PAUSE = config["photo_pause"]  # in seconds
 ARDUINO_JSON = config["arduino_json"]  # communicate with serial & json (unless with gpio)
-VERTICAL = config["vertical"]  # strip à la verticale
+VERTICAL = config["vertical"]  # strip ÃÂ  la verticale
 
 # Folder containing background
 PROCESS_ASSETS_FOLDER = Path(CURRENT_PATH, "assets/")
@@ -126,37 +126,39 @@ SERIAL = None # Serial arduino
 
 def connect_to_arduino():
     def find_arduino_port():
-        # Obtient la liste des ports série disponibles
+        # Obtient la liste des ports sÃÂ©rie disponibles
         available_ports = list_ports.comports()
 
-        # Itère sur la liste des ports
+        # ItÃÂ¨re sur la liste des ports
         for port in available_ports:
             try:
-                # Teste la liaison série pour le port actuel
-                SERIAL = serial.Serial(port.device, 9600, timeout=1)
+                # Teste la liaison sÃÂ©rie pour le port actuel
+                SERIAL = serial.Serial(port.device, 115200, timeout=1)
                 SERIAL.reset_input_buffer()
-                # Si la liaison série est réussie, retourne le port
+                # Si la liaison sÃÂ©rie est rÃÂ©ussie, retourne le port
                 return port.device
             except:
-                logging.debug("Error serial arduino {0}".format(port.device))
+                print("Error serial arduino {0}".format(port.device))
 
-        # Retourne None si aucun port n'a été trouvé
+        # Retourne None si aucun port n'a ÃÂ©tÃÂ© trouvÃÂ©
         return None
 
-    # Utilise la fonction pour trouver le port série
+    # Utilise la fonction pour trouver le port sÃÂ©rie
     arduino_port = find_arduino_port()
 
     if arduino_port:
         try:
-            SERIAL = serial.Serial(arduino_port, 9600, timeout=1)
+            SERIAL = serial.Serial(arduino_port, 115200, timeout=1)
             SERIAL.reset_input_buffer()
-            # Effectue d'autres opérations avec la liaison série établie
+            # Effectue d'autres opÃÂ©rations avec la liaison sÃÂ©rie ÃÂ©tablie
             return SERIAL
         except:
-            logging.debug("Error connecting to Arduino")
+            print("Error connecting to Arduino")
+            SERIAL = None
             return None
     else:
-        logging.debug("No Arduino port found")
+        print("No Arduino port found")
+        SERIAL = None
         return None
 
 def capture_webcam(
@@ -212,7 +214,7 @@ def init_camera():
         # no camera, try again in 2 seconds
         time.sleep(2)
 
-    # capture pour enclencher le process sinon Ã§a le fait pas
+    # capture pour enclencher le process sinon ÃÂÃÂ§a le fait pas
     logging.info("Camera init - first capture")
     CAMERA.capture(gp.GP_CAPTURE_IMAGE)
 
@@ -234,7 +236,10 @@ def capture(camera):
 
     for image_index in range(PHOTO_COUNT):
         # arduino show countdown order
-        SERIAL.write(json.dumps({"cmd": "countdown",}).encode('utf-8'))
+        try:
+            SERIAL.write("3".encode('utf-8'))
+        except Exception as e:
+            logging.debug(traceback.format_exc());
         time.sleep(PHOTO_PAUSE)
 
         filename = str(image_index) + ".jpg"
@@ -273,7 +278,7 @@ def save_ia_image(capture_path, index, prompt):
             new_size = (int(source.size[0] * ratio), int(source.size[1] * ratio))
             source = source.resize(new_size, Image.Resampling.LANCZOS)
             
-            # CrÃ©ation de l'image finale de fond noir en 512x512
+            # CrÃÂÃÂ©ation de l'image finale de fond noir en 512x512
             final_size = (512, 512)
             final_image = Image.new("RGB", final_size, "black")
             
@@ -285,7 +290,7 @@ def save_ia_image(capture_path, index, prompt):
             final_image.paste(source, (x, y))
                 
                 
-            # PrÃ©paration de l'image pour l'envoi
+            # PrÃÂÃÂ©paration de l'image pour l'envoi
             buffered = BytesIO()
             final_image.save(buffered, format="JPEG")
             img_str = base64.b64encode(buffered.getvalue())
@@ -293,25 +298,45 @@ def save_ia_image(capture_path, index, prompt):
             # Envoi de l'image par POST
             print
             payload = {"prompt": prompt["positive"],"negative_prompt": prompt["negative"], "loras":json.dumps(prompt["loras"]), "file": img_str}
-            logging.debug(config["vmgpu_url"])
-            logging.debug(payload)
-            response = requests.post(url=config["vmgpu_url"], data=payload, timeout=(240,210))
 
-            # Gestion de la rÃ©ponse
+            available_urls = [
+                    "http://vmgpu.taile7da6.ts.net:5005/api/processing",
+                    "http://vmgpu-1.taile7da6.ts.net:5005/api/processing",
+                    "http://vmgpu-2.taile7da6.ts.net:5005/api/processing",
+                    "http://vmgpu-3.taile7da6.ts.net:5005/api/processing",
+                    "http://vmgpu-4.taile7da6.ts.net:5005/api/processing"
+            ]
+            vmgpu_url = available_urls[0]
+
+            for url in available_urls:
+                try:
+                    r = requests.get(url,timeout=1)
+                    r.raise_for_status()
+                    if r.status_code == 200:
+                        vmgpu_url = url
+                        break
+                except:
+                    pass
+
+            logging.debug(payload)
+            response = requests.post(url=vmgpu_url, data=payload, timeout=(240,210))
+            response = requests.post(url=vmgpu_url, data=payload, timeout=(10,210))
+
+            # Gestion de la rÃÂÃÂ©ponse
             if response.status_code == 200:
-                # Sauvegarde de l'image reÃ§ue dans le systÃ¨me de fichiers
+                # Sauvegarde de l'image reÃÂÃÂ§ue dans le systÃÂÃÂ¨me de fichiers
                 filepath = Path(capture_path, f"{index}.ia.jpg")
                 logging.debug(filepath)
                 with open(filepath, 'wb') as f:
                     f.write(response.content)
 
-                # Ouverture de l'image reÃ§ue pour traitement
+                # Ouverture de l'image reÃÂÃÂ§ue pour traitement
                 with Image.open(filepath) as img:
-                    # Supposer que les bordures noires prennent 124 pixels des cÃ´tÃ©s aprÃ¨s le redimensionnement en 1024x1024
+                    # Supposer que les bordures noires prennent 124 pixels des cÃÂÃÂ´tÃÂÃÂ©s aprÃÂÃÂ¨s le redimensionnement en 1024x1024
                     if VERTICAL:
-                        crop_box = (0, 124, 1024, 900)  # Exclure les bordures noires latÃ©rales
+                        crop_box = (0, 124, 1024, 900)  # Exclure les bordures noires latÃÂÃÂ©rales
                     else:
-                        crop_box = (124, 0, 900, 1024)  # Exclure les bordures noires latÃ©rales
+                        crop_box = (124, 0, 900, 1024)  # Exclure les bordures noires latÃÂÃÂ©rales
                     img_cropped = img.crop(crop_box)
                     
                     # Redimensionnement pour obtenir la taille finale de 875x1150
@@ -360,7 +385,7 @@ def processImage(capture_uuid, imgName):
 def processImageVertical(capture_uuid, imgName):
     CAPTURE_PATH = Path(CAPTURE_FOLDER, str(capture_uuid))
     img = Image.open(Path(CAPTURE_PATH, imgName))
-    crop = (189, 0, 2787, 1984)
+    crop = (164, 0, 2428, 1728)
     img = img.crop(crop)
     (width, height) = (1150, 875)
     img = img.resize((width, height))
@@ -404,6 +429,18 @@ def capture_to_montage(capture_uuid, bIA):
     except FileNotFoundError:
         imia4 = im4.convert("L")
 
+    if BKPIMG:
+        idPrint = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+        #PROCESS_FILE_MARGIN.save(Path(BKP_PATH, idPrint + "_print.jpg"), quality=95)
+        #im1.save(Path(BKP_PATH, idPrint + "_1.jpg"), quality=95)
+        #im2.save(Path(BKP_PATH, idPrint + "_2.jpg"), quality=95)
+        #im3.save(Path(BKP_PATH, idPrint + "_3.jpg"), quality=95)
+        #im4.save(Path(BKP_PATH, idPrint + "_4.jpg"), quality=95)
+        imia1.save(Path(BKP_PATH, idPrint + "_1bis.jpg"), quality=95)
+        imia2.save(Path(BKP_PATH, idPrint + "_2bis.jpg"), quality=95)
+        imia3.save(Path(BKP_PATH, idPrint + "_3bis.jpg"), quality=95)
+        imia4.save(Path(BKP_PATH, idPrint + "_4bis.jpg"), quality=95)
+
     #rotate si mode horizontal
     if VERTICAL:
         im1 = im1.rotate(90, expand=True)
@@ -440,17 +477,17 @@ def capture_to_montage(capture_uuid, bIA):
     PROCESS_FILE_MARGIN.save(Path(CAPTURE_PATH, "print.jpg"), quality=95)
 
     #BACKUP
-    if BKPIMG:
-        idPrint = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-        PROCESS_FILE_MARGIN.save(Path(BKP_PATH, idPrint + "_print.jpg"), quality=95)
-        im1.save(Path(BKP_PATH, idPrint + "_1.jpg"), quality=95)
-        im2.save(Path(BKP_PATH, idPrint + "_2.jpg"), quality=95)
-        im3.save(Path(BKP_PATH, idPrint + "_3.jpg"), quality=95)
-        im4.save(Path(BKP_PATH, idPrint + "_4.jpg"), quality=95)
-        imia1.save(Path(BKP_PATH, idPrint + "_1bis.jpg"), quality=95)
-        imia2.save(Path(BKP_PATH, idPrint + "_2bis.jpg"), quality=95)
-        imia3.save(Path(BKP_PATH, idPrint + "_3bis.jpg"), quality=95)
-        imia4.save(Path(BKP_PATH, idPrint + "_4bis.jpg"), quality=95)
+    #if BKPIMG:
+        #idPrint = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+        #PROCESS_FILE_MARGIN.save(Path(BKP_PATH, idPrint + "_print.jpg"), quality=95)
+        #im1.save(Path(BKP_PATH, idPrint + "_1.jpg"), quality=95)
+        #im2.save(Path(BKP_PATH, idPrint + "_2.jpg"), quality=95)
+        #im3.save(Path(BKP_PATH, idPrint + "_3.jpg"), quality=95)
+        #im4.save(Path(BKP_PATH, idPrint + "_4.jpg"), quality=95)
+        #imia1.save(Path(BKP_PATH, idPrint + "_1bis.jpg"), quality=95)
+        #imia2.save(Path(BKP_PATH, idPrint + "_2bis.jpg"), quality=95)
+        #imia3.save(Path(BKP_PATH, idPrint + "_3bis.jpg"), quality=95)
+        #imia4.save(Path(BKP_PATH, idPrint + "_4bis.jpg"), quality=95)
 
 def print_image(capture_uuid):
     # impression
@@ -497,18 +534,20 @@ def main():
                 try:
                     if SERIAL.in_waiting > 0:
                         line = SERIAL.readline().decode("utf-8").rstrip()
-
+                        print(line)
                         try:
                             jason = json.loads(line)
                         except json.decoder.JSONDecodeError:
                             logging.info("Not json:" + str(line))
-
+                        print("json:" + str(jason))
                         logging.info("json:" + str(jason))
 
                         if "cmd" in jason and jason["cmd"] == "startShot":
                             bStart = True
                 except Exception:
-                    SERIAL.close()
+                    print("Serial Close")
+                    if SERIAL is not None:
+                        SERIAL.close()
                     SERIAL = connect_to_arduino()
             else:
                 if GPIO.input(15):
@@ -532,7 +571,15 @@ def main():
                     capture_to_ia(capture_uuid, jason["styl"])
                 output = capture_to_montage(capture_uuid, "mode" in jason and jason["mode"] == "ia")
                 if PRINT:
-                    print_image(capture_uuid)      
+                    print_image(capture_uuid)  
+                # Envoi signal de dÃÂ©blocage ÃÂ  l'arduino 
+                try:
+                    if SERIAL is not None:
+                        SERIAL.write("4".encode('utf-8'))
+                        SERIAL.close()
+                    SERIAL = connect_to_arduino()
+                except Exception as e:
+                    logging.debug(traceback.format_exc());   
 
         return 0
     else:
@@ -548,3 +595,5 @@ def main():
 if __name__ == "__main__":
     main()
     logging.info("Stop")
+
+

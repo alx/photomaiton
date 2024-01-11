@@ -1,5 +1,5 @@
 #
-# Send json command to arduino to simulate payment OK
+# Send json command to arduino to start photo sequence
 #
 
 import serial
@@ -7,6 +7,7 @@ import json
 import os
 import logging
 from pathlib import Path
+from arduino import connect_to_arduino
 
 CURRENT_PATH = os.path.dirname(os.path.abspath(__file__))
 
@@ -18,22 +19,12 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 
-# Serial arduino
-try:
-    ser = serial.Serial("/dev/ttyUSB0", 9600, timeout=1)
-    ser.reset_input_buffer()
-except:
-    logging.debug("Error serial arduino usb0")
-    try:
-        ser = serial.Serial("/dev/ttyUSB1", 9600, timeout=1)
-        ser.reset_input_buffer()
-    except:
-        logging.debug("Error serial arduino usb1")
+serial = connect_to_arduino()
 
 def main():
     # convert into JSON:
-    jason = "2".encode('utf-8')
-    ser.write(jason)
+    jason = "6".encode('utf-8')
+    serial.write(jason)
     return 1
 
 

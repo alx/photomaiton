@@ -18,6 +18,7 @@
 //PINS
 
 #define STRIP_PIN 9 // Chatoyance
+#define NB_LEDS 169
 
 #define LED_MATRIX_SDI_PIN 12 // SDI = DIN
 #define LED_MATRIX_CS_PIN 11 // CS

@@ -9,5 +9,7 @@ void startShot();
 bool checkCmdInitShot();
 bool checkCmdStartShot();
 bool checkCmdCountdown();
-bool checkUpdate();
+bool checkCmd(int cmd);
+void checkAvailableCommand();
+bool checkCmdEndWait();
 #endif
