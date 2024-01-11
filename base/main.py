@@ -319,7 +319,7 @@ def save_ia_image(capture_path, index, prompt):
                     pass
 
             logging.debug(payload)
-            response = requests.post(url=vmgpu_url, data=payload, timeout=(240,210))
+            # Timeouts : 1 = temps handshake server, 2 = temps de traitement
             response = requests.post(url=vmgpu_url, data=payload, timeout=(10,210))
 
             # Gestion de la rÃÂÃÂ©ponse
