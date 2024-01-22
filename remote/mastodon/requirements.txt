@@ -28,7 +28,7 @@ onnxruntime==1.16.0
 opencv-python==4.8.1.78
 opencv-python-headless==4.8.1.78
 packaging==23.2
-Pillow==10.0.1
+Pillow==10.2.0
 prettytable==3.9.0
 protobuf==4.24.4
 pyparsing==3.1.1

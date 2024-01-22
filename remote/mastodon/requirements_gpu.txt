@@ -57,7 +57,7 @@ opencv-contrib-python==4.8.1.78
 opencv-python==4.8.1.78
 opencv-python-headless==4.8.1.78
 packaging==23.2
-Pillow==10.0.1
+Pillow==10.2.0
 prettytable==3.9.0
 protobuf==3.20.3
 psutil==5.9.5
