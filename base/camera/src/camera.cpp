@@ -71,7 +71,8 @@ void setup() {
   
   //parametres.price_cts = 400;
   //parametres.mode = MODE_PAYING;
-  //parametres.mode = MODE_FREE;
+  parametres.mode = MODE_FREE;
+  EEPROM.updateBlock(EEPROM_ADRESS, parametres);
   
   disableCoinAcceptor();
   initLedMatrix();
@@ -84,39 +85,38 @@ unsigned long lastRefresh = 0;
 void loop() {
   //FREERAM_PRINT;
 
-  checkAvailableCommand();
+  #ifdef JSON
+    checkAvailableCommand();
 
-  unsigned long currMillis = millis();
-  if(currMillis - lastRefresh > 200){
-    refreshStrip();
-    lastRefresh = currMillis;
-  }
-    
-  //Check for updates from raspi.
-  if(checkCmd(5)){ // set free mode
-    parametres.mode = MODE_FREE;
-    EEPROM.updateBlock(EEPROM_ADRESS, parametres);
-    enableCoinAcceptor(parametres);
-  }
+    unsigned long currMillis = millis();
+    if(currMillis - lastRefresh > 200){
+      refreshStrip();
+      lastRefresh = currMillis;
+    }
+      
+    //Check for updates from raspi.
+    if(checkCmd(5)){ // set free mode
+      parametres.mode = MODE_FREE;
+      EEPROM.updateBlock(EEPROM_ADRESS, parametres);
+      enableCoinAcceptor(parametres);
+    }
 
-  if(checkCmd(6)){ // set paying mode
-    parametres.price_cts = 300;
-    parametres.mode = MODE_PAYING;
-    EEPROM.updateBlock(EEPROM_ADRESS, parametres);
-    enableCoinAcceptor(parametres);
-  }
+    if(checkCmd(6)){ // set paying mode
+      parametres.price_cts = 300;
+      parametres.mode = MODE_PAYING;
+      EEPROM.updateBlock(EEPROM_ADRESS, parametres);
+      enableCoinAcceptor(parametres);
+    }
+  #endif
 
   // If coin acceptor OK and clic start button.
   if(manageCoinsAndStart(parametres)) {
     auxOn();
-    byte pose1 = readRotSwitchByte(ROTSW1_PIN);
-    byte pose2 = readRotSwitchByte(ROTSW2_PIN);
-    byte pose3 = readRotSwitchByte(ROTSW3_PIN);
-    byte pose4 = readRotSwitchByte(ROTSW4_PIN);
-    /*parametres.totStrip += 1;
-    parametres.bRunning = true;
-    EEPROM.updateBlock(EEPROM_ADRESS, parametres);*/
     #ifdef JSON
+      byte pose1 = readRotSwitchByte(ROTSW1_PIN);
+      byte pose2 = readRotSwitchByte(ROTSW2_PIN);
+      byte pose3 = readRotSwitchByte(ROTSW3_PIN);
+      byte pose4 = readRotSwitchByte(ROTSW4_PIN);
       startShot();
     #else
       digitalWrite(NUMERIC_PIN, HIGH); // start raspberry pi sequence
@@ -127,24 +127,24 @@ void loop() {
     bool bClassic = digitalRead(SELECTOR_PIN);
 
     for(byte i = 0; i < 4;i++){
-      if(!bClassic){
-        lightOne(112 - pose1, 255, 0, 0);
-        lightOne(54 + pose2, 255, 0, 0);
-        lightOne(126 - pose3, 255, 0, 0);
-        lightOne(40 + pose4, 255, 0, 0);
-        if(i == 0){
-          lightOne(112 - pose1, 0, 255, 0);
-        } else if(i == 1){
-          lightOne(54 + pose2, 0, 255, 0);
-        } else if(i == 2){
-          lightOne(126 - pose3, 0, 255, 0);
-        } else {
-          lightOne(40 + pose4, 0, 255, 0);
-        }
-        fastLedShow();
-      }
-      
       #ifdef JSON
+        if(!bClassic){
+          lightOne(112 - pose1, 255, 0, 0);
+          lightOne(54 + pose2, 255, 0, 0);
+          lightOne(126 - pose3, 255, 0, 0);
+          lightOne(40 + pose4, 255, 0, 0);
+          if(i == 0){
+            lightOne(112 - pose1, 0, 255, 0);
+          } else if(i == 1){
+            lightOne(54 + pose2, 0, 255, 0);
+          } else if(i == 2){
+            lightOne(126 - pose3, 0, 255, 0);
+          } else {
+            lightOne(40 + pose4, 0, 255, 0);
+          }
+          fastLedShow();
+        }
+
         unsigned long currMillis = millis();
         unsigned long timeout = currMillis;
         while(!checkCmdCountdown()){
@@ -166,23 +166,25 @@ void loop() {
     }
     // 2 more sec before switching aux off.
     delay(2000);
-    //auxOff();
+    auxOff();
     //showCross();
-    unsigned long currMillis = millis();
-    unsigned long timeout = currMillis;
-    unsigned long animRefresh = 0;
-    while(!checkCmdEndWait()){
-      currMillis = millis();
-      if(currMillis - animRefresh > 200){
-        animRefresh = currMillis;
-        waitAnim();
+    #ifdef JSON
+      unsigned long currMillis = millis();
+      unsigned long timeout = currMillis;
+      unsigned long animRefresh = 0;
+      while(!checkCmdEndWait()){
+        currMillis = millis();
+        if(currMillis - animRefresh > 200){
+          animRefresh = currMillis;
+          waitAnim();
+        }
+        if(currMillis - timeout > 180000){
+          // si pas de réponse aprés timeout 3mn, continue.
+          break;
+        }
+        checkAvailableCommand();
       }
-      if(currMillis - timeout > 180000){
-        // si pas de réponse aprés timeout 3mn, continue.
-        break;
-      }
-      checkAvailableCommand();
-    }
+    #endif
     showSmiley();
     enableCoinAcceptor(parametres);
     /*parametres.bRunning = false;

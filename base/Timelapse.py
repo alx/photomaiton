@@ -234,7 +234,8 @@ def capture(camera):
 
     logging.info("Capture - Start shooting - " + str(capture_uuid))
 
-    for image_index in range(PHOTO_COUNT):
+    for image_index in range(10):
+        print(image_index)
         # arduino show countdown order
         try:
             SERIAL.write("3".encode('utf-8'))
@@ -365,13 +366,13 @@ def save_ia_image(capture_path, index, prompt):
         logging.error("An exception occurred while processing the image:")
         logging.error(traceback.format_exc())
 
-def capture_to_ia(capture_uuid, jason):
+def capture_to_ia(capture_uuid, config):
 
     CAPTURE_PATH = Path(CAPTURE_FOLDER, str(capture_uuid))
-    save_ia_image(CAPTURE_PATH, 0, config["prompts"]["1"+ str(jason[0])])
-    save_ia_image(CAPTURE_PATH, 1, config["prompts"]["2"+ str(jason[1])])
-    save_ia_image(CAPTURE_PATH, 2, config["prompts"]["3"+ str(jason[2])])
-    save_ia_image(CAPTURE_PATH, 3, config["prompts"]["4"+ str(jason[3])])
+
+    for image_index, prompt_data in enumerate(config["prompts"]):
+        save_ia_image(CAPTURE_PATH, image_index, prompt_data)
+
 
 def processImage(capture_uuid, imgName):
     CAPTURE_PATH = Path(CAPTURE_FOLDER, str(capture_uuid))
@@ -394,101 +395,23 @@ def processImageVertical(capture_uuid, imgName):
     return img
 
 def processImages(capture_uuid):
-    if not VERTICAL:
-        im1 = processImage(capture_uuid, "0.jpg")
-        im2 = processImage(capture_uuid, "1.jpg")
-        im3 = processImage(capture_uuid, "2.jpg")
-        im4 = processImage(capture_uuid, "3.jpg")
-    else:
-        im1 = processImageVertical(capture_uuid, "0.jpg")
-        im2 = processImageVertical(capture_uuid, "1.jpg")
-        im3 = processImageVertical(capture_uuid, "2.jpg")
-        im4 = processImageVertical(capture_uuid, "3.jpg")
-
+    for image_index in range(10):
+        if not VERTICAL:
+            im = processImage(capture_uuid, str(image_index) + ".jpg")
+        else:
+            im = processImage(capture_uuid, str(image_index) + ".jpg")
 
 def capture_to_montage(capture_uuid, bIA):
     CAPTURE_PATH = Path(CAPTURE_FOLDER, str(capture_uuid))
-    im1 = Image.open(Path(CAPTURE_PATH, "0.jpg"))
-    im2 = Image.open(Path(CAPTURE_PATH, "1.jpg"))
-    im3 = Image.open(Path(CAPTURE_PATH, "2.jpg"))
-    im4 = Image.open(Path(CAPTURE_PATH, "3.jpg"))
-    
-    try:
-        imia1 = Image.open(Path(CAPTURE_PATH, "0.ia.jpg"))
-    except FileNotFoundError:
-        imia1 = im1.convert("L")
-    try:
-        imia2 = Image.open(Path(CAPTURE_PATH, "1.ia.jpg"))
-    except FileNotFoundError:
-        imia2 = im2.convert("L")
-    try:
-        imia3 = Image.open(Path(CAPTURE_PATH, "2.ia.jpg"))
-    except FileNotFoundError:
-        imia3 = im3.convert("L")
-    try:
-        imia4 = Image.open(Path(CAPTURE_PATH, "3.ia.jpg"))
-    except FileNotFoundError:
-        imia4 = im4.convert("L")
+    for image_index in range(10):
+        im = Image.open(Path(CAPTURE_PATH, str(image_index) + ".jpg"))
+        try:
+            imia = Image.open(Path(CAPTURE_PATH, str(image_index) +".ia.jpg"))
+        except FileNotFoundError:
+            imia = im.convert("L")
 
-    if BKPIMG:
-        idPrint = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-        #PROCESS_FILE_MARGIN.save(Path(BKP_PATH, idPrint + "_print.jpg"), quality=95)
-        #im1.save(Path(BKP_PATH, idPrint + "_1.jpg"), quality=95)
-        #im2.save(Path(BKP_PATH, idPrint + "_2.jpg"), quality=95)
-        #im3.save(Path(BKP_PATH, idPrint + "_3.jpg"), quality=95)
-        #im4.save(Path(BKP_PATH, idPrint + "_4.jpg"), quality=95)
-        imia1.save(Path(BKP_PATH, idPrint + "_1bis.jpg"), quality=95)
-        imia2.save(Path(BKP_PATH, idPrint + "_2bis.jpg"), quality=95)
-        imia3.save(Path(BKP_PATH, idPrint + "_3bis.jpg"), quality=95)
-        imia4.save(Path(BKP_PATH, idPrint + "_4bis.jpg"), quality=95)
-
-    #rotate si mode horizontal
-    if VERTICAL:
-        im1 = im1.rotate(90, expand=True)
-        im2 = im2.rotate(90, expand=True)
-        im3 = im3.rotate(90, expand=True)
-        im4 = im4.rotate(90, expand=True)
-        imia1 = imia1.rotate(90, expand=True)
-        imia2 = imia2.rotate(90, expand=True)
-        imia3 = imia3.rotate(90, expand=True)
-        imia4 = imia4.rotate(90, expand=True)
-    
-    mask = PROCESS_FILE_MASK.resize(im1.size)
-    mask = mask.convert("L")
-
-    # Couleur
-    PROCESS_FILE_BACKGROUND.paste(im1, (20, 20), mask)
-    PROCESS_FILE_BACKGROUND.paste(im2, (915, 20), mask)
-    PROCESS_FILE_BACKGROUND.paste(im3, (1810, 20), mask)
-    PROCESS_FILE_BACKGROUND.paste(im4, (2705, 20), mask)
-    
-    # noir et blanc ou IA
-    PROCESS_FILE_BACKGROUND.paste(imia1, (20, 1225), mask)
-    PROCESS_FILE_BACKGROUND.paste(imia2, (915, 1225), mask)
-    PROCESS_FILE_BACKGROUND.paste(imia3, (1810, 1225), mask)
-    PROCESS_FILE_BACKGROUND.paste(imia4, (2705, 1225), mask)  
-
-    # logos
-    if ADD_LOGO:
-        PROCESS_FILE_BACKGROUND.paste(PROCESS_FILE_LOGO1, (LOGO1_POS['x'], LOGO1_POS['y']), PROCESS_FILE_LOGO1)
-        PROCESS_FILE_BACKGROUND.paste(PROCESS_FILE_LOGO2, (LOGO2_POS['x'], LOGO2_POS['y']), PROCESS_FILE_LOGO2)
-
-    # Add margins
-    PROCESS_FILE_MARGIN.paste(PROCESS_FILE_BACKGROUND, (MARGIN['x'], MARGIN['y']))
-    PROCESS_FILE_MARGIN.save(Path(CAPTURE_PATH, "print.jpg"), quality=95)
-
-    #BACKUP
-    #if BKPIMG:
-        #idPrint = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-        #PROCESS_FILE_MARGIN.save(Path(BKP_PATH, idPrint + "_print.jpg"), quality=95)
-        #im1.save(Path(BKP_PATH, idPrint + "_1.jpg"), quality=95)
-        #im2.save(Path(BKP_PATH, idPrint + "_2.jpg"), quality=95)
-        #im3.save(Path(BKP_PATH, idPrint + "_3.jpg"), quality=95)
-        #im4.save(Path(BKP_PATH, idPrint + "_4.jpg"), quality=95)
-        #imia1.save(Path(BKP_PATH, idPrint + "_1bis.jpg"), quality=95)
-        #imia2.save(Path(BKP_PATH, idPrint + "_2bis.jpg"), quality=95)
-        #imia3.save(Path(BKP_PATH, idPrint + "_3bis.jpg"), quality=95)
-        #imia4.save(Path(BKP_PATH, idPrint + "_4bis.jpg"), quality=95)
+        im.save(Path(BKP_PATH, str(image_index) +".jpg"), quality=95)
+        imia.save(Path(BKP_PATH, str(image_index) +".ia.jpg"), quality=95)
 
 def print_image(capture_uuid):
     # impression
@@ -572,8 +495,8 @@ def main():
                 if "mode" in jason and jason["mode"] == "ia":
                     capture_to_ia(capture_uuid, jason["styl"])
                 output = capture_to_montage(capture_uuid, "mode" in jason and jason["mode"] == "ia")
-                if PRINT:
-                    print_image(capture_uuid)  
+                #if PRINT:
+                    #print_image(capture_uuid)  
                 # Envoi signal de dÃÂ©blocage ÃÂ  l'arduino 
                 try:
                     if SERIAL is not None:
