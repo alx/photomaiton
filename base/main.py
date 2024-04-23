@@ -67,7 +67,7 @@ if not CAPTURE_FOLDER.exists():
 
 # Create background image if it doesn't exist
 try:
-    PROCESS_FILE_BACKGROUND = Image.open(Path(PROCESS_ASSETS_FOLDER, "background.jpg"))
+    PROCESS_FILE_BACKGROUND = Image.open(Path(PROCESS_ASSETS_FOLDER, "background.png"))
 except FileNotFoundError:
     PROCESS_FILE_BACKGROUND = Image.new("RGB", (3600, 2400), color="white")
     PROCESS_FILE_BACKGROUND.save(Path(PROCESS_ASSETS_FOLDER, "background.jpg"))
@@ -236,10 +236,11 @@ def capture(camera):
 
     for image_index in range(PHOTO_COUNT):
         # arduino show countdown order
-        try:
-            SERIAL.write("3".encode('utf-8'))
-        except Exception as e:
-            logging.debug(traceback.format_exc());
+        if ARDUINO_JSON:
+            try:
+                SERIAL.write("3".encode('utf-8'))
+            except Exception as e:
+                logging.debug(traceback.format_exc());
         time.sleep(PHOTO_PAUSE)
 
         filename = str(image_index) + ".jpg"
@@ -260,6 +261,40 @@ def capture(camera):
         )
         print("save")
         camera_file.save(target)
+
+        #Appel serveur
+        if not VERTICAL:
+            image = processImage(capture_uuid, filename)
+        else:
+            image = processImageVertical(capture_uuid, filename)
+
+        buffered = BytesIO()
+        image.save(buffered, format="JPEG")
+        img_str = base64.b64encode(buffered.getvalue())
+
+        url = "http://uncanny.taile7da6.ts.net:7860"
+
+        payload = {
+            "batch_size" :1,
+            "prompt" :"naked under the shower",
+            "steps" :20,
+            "styles" :[ ],
+            "subseed" :-1,
+            "subseed_strength" :0,
+            "tiling" :False,
+            "width" :875,
+            "height":1150
+        }
+        response = requests.post(f'{url}/sdapi/v1/txt2img', json=payload)
+        if not response.ok:
+            print(f'{url}/sdapi/v1/txt2img')
+            print(response)
+            raise RuntimeError("post request failed")
+
+        for i, base64_image in enumerate(response.json()['images']):
+            with open(f"{image_index}.ia.jpg", 'wb') as fp:
+                fp.write(base64.b64decode(base64_image))
+
     print("fin capture")
     return capture_uuid
 
@@ -569,19 +604,20 @@ def main():
                 print("fin db")
                 processImages(capture_uuid)
                 print("fin processImages")
-                if "mode" in jason and jason["mode"] == "ia":
+                if ARDUINO_JSON and "mode" in jason and jason["mode"] == "ia":
                     capture_to_ia(capture_uuid, jason["styl"])
-                output = capture_to_montage(capture_uuid, "mode" in jason and jason["mode"] == "ia")
+                output = capture_to_montage(capture_uuid, ARDUINO_JSON and "mode" in jason and jason["mode"] == "ia")
                 if PRINT:
                     print_image(capture_uuid)  
                 # Envoi signal de dÃÂ©blocage ÃÂ  l'arduino 
-                try:
-                    if SERIAL is not None:
-                        SERIAL.write("4".encode('utf-8'))
-                        SERIAL.close()
-                    SERIAL = connect_to_arduino()
-                except Exception as e:
-                    logging.debug(traceback.format_exc());   
+                if ARDUINO_JSON:
+                    try:
+                        if SERIAL is not None:
+                            SERIAL.write("4".encode('utf-8'))
+                            SERIAL.close()
+                        SERIAL = connect_to_arduino()
+                    except Exception as e:
+                        logging.debug(traceback.format_exc());   
 
         return 0
     else:
