@@ -43,28 +43,18 @@ boolean manageCoinsAndStart(struct storage parametres){
   PRICE_CTS = parametres.price_cts;
 
   // Check millis of board that manage credit card reader
-  if(bCarteOK == true && cents == 0){
+  if(bCarteOK){
     startInterruptCB = millis();
-    bCarteOK = false;
-
+    
     while(digitalRead(CB_PIN) == true){
-      
     }
 
     unsigned long stopInterruptCB = millis();
     if(stopInterruptCB - startInterruptCB < 50){
-      cents = 0;
+      bCarteOK = false;
     }else{
       cents = parametres.price_cts;
     }
-    if(stopInterruptCB - startInterruptCB > 50){
-      Serial.print(F("CB interrupt"));
-      Serial.println(stopInterruptCB - startInterruptCB);
-      Serial.print(F("cents="));
-      Serial.println(cents);
-    }
-  }else{
-    bCarteOK = false;
   }
 
   // Gestion paiement ok depuis raspi
