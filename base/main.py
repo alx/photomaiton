@@ -20,6 +20,9 @@ import base64
 import requests
 import usb.core
 import db
+import webuiapi
+import random
+import threading
 
 CURRENT_PATH = os.path.dirname(os.path.abspath(__file__))
 parser = argparse.ArgumentParser(description="Read config file path")
@@ -67,14 +70,14 @@ if not CAPTURE_FOLDER.exists():
 
 # Create background image if it doesn't exist
 try:
-    PROCESS_FILE_BACKGROUND = Image.open(Path(PROCESS_ASSETS_FOLDER, "background.png"))
+    PROCESS_FILE_BACKGROUND = Image.open(Path(PROCESS_ASSETS_FOLDER, "background.jpg"))
 except FileNotFoundError:
     PROCESS_FILE_BACKGROUND = Image.new("RGB", (3600, 2400), color="white")
     PROCESS_FILE_BACKGROUND.save(Path(PROCESS_ASSETS_FOLDER, "background.jpg"))
 
 # Create mask image if it doesn't exist
 try:
-    PROCESS_FILE_MASK = Image.open(Path(PROCESS_ASSETS_FOLDER, "mask.jpg"))
+    PROCESS_FILE_MASK = Image.open(Path(PROCESS_ASSETS_FOLDER, "maskVertical.jpg"))
 except FileNotFoundError:
     PROCESS_FILE_MASK = Image.new("RGB", (875, 1150), color="white")
     PROCESS_FILE_MASK.save(Path(PROCESS_ASSETS_FOLDER, "mask.jpg"))
@@ -96,7 +99,7 @@ if ADD_LOGO:
         PROCESS_FILE_LOGO1 = Image.new("RGB", (1, 1), color="white")
         PROCESS_FILE_LOGO1.save(Path(PROCESS_ASSETS_FOLDER, "logo1.png"))
         PROCESS_FILE_LOGO2 = Image.new("RGB", (1, 1), color="white")
-        PROCESS_FILE_LOGO2.save(Path(PROCESS_ASSETS_FOLDER, "logo2<.png"))
+        PROCESS_FILE_LOGO2.save(Path(PROCESS_ASSETS_FOLDER, "logo2.png"))
 
 # Final image for print (dnp ds 40 eat the borders / fond perdu)
 try:
@@ -123,6 +126,16 @@ except:
 
 CAMERA = None
 SERIAL = None # Serial arduino
+
+
+#Api serveur IA
+IA = config["ia"]
+api = webuiapi.WebUIApi()
+
+# create API client with custom host, port
+api = webuiapi.WebUIApi(host='uncanny.taile7da6.ts.net', port=7860, sampler = "Euler a")
+
+print(api.get_options()['sd_model_checkpoint'])
 
 def connect_to_arduino():
     def find_arduino_port():
@@ -226,14 +239,14 @@ def init_camera():
 
 def capture(camera):
     #capture_uuid = uuid.uuid4()
-    capture_uuid = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+    capture_uuid = datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
     CAPTURE_PATH = Path(CAPTURE_FOLDER, str(capture_uuid))
 
     if not CAPTURE_PATH.exists():
         os.makedirs(CAPTURE_PATH)
 
     logging.info("Capture - Start shooting - " + str(capture_uuid))
-
+    nextShot = time.time()
     for image_index in range(PHOTO_COUNT):
         # arduino show countdown order
         if ARDUINO_JSON:
@@ -241,7 +254,10 @@ def capture(camera):
                 SERIAL.write("3".encode('utf-8'))
             except Exception as e:
                 logging.debug(traceback.format_exc());
-        time.sleep(PHOTO_PAUSE)
+        
+        current = time.time()
+        while  PHOTO_PAUSE >  current - nextShot:
+            current = time.time()
 
         filename = str(image_index) + ".jpg"
         target = os.path.join(CAPTURE_PATH, filename)
@@ -262,38 +278,16 @@ def capture(camera):
         print("save")
         camera_file.save(target)
 
-        #Appel serveur
+        nextShot = time.time()
+        print("process image")
         if not VERTICAL:
-            image = processImage(capture_uuid, filename)
+            im1 = processImage(capture_uuid, str(image_index) + ".jpg")
         else:
-            image = processImageVertical(capture_uuid, filename)
+            im1 = processImageVertical(capture_uuid, str(image_index) + ".jpg")
 
-        buffered = BytesIO()
-        image.save(buffered, format="JPEG")
-        img_str = base64.b64encode(buffered.getvalue())
-
-        url = "http://uncanny.taile7da6.ts.net:7860"
-
-        payload = {
-            "batch_size" :1,
-            "prompt" :"naked under the shower",
-            "steps" :20,
-            "styles" :[ ],
-            "subseed" :-1,
-            "subseed_strength" :0,
-            "tiling" :False,
-            "width" :875,
-            "height":1150
-        }
-        response = requests.post(f'{url}/sdapi/v1/txt2img', json=payload)
-        if not response.ok:
-            print(f'{url}/sdapi/v1/txt2img')
-            print(response)
-            raise RuntimeError("post request failed")
-
-        for i, base64_image in enumerate(response.json()['images']):
-            with open(f"{image_index}.ia.jpg", 'wb') as fp:
-                fp.write(base64.b64decode(base64_image))
+        print("process ia")
+        task = threading.Thread( target = threadIA, name=str(image_index), args   = ( capture_uuid, image_index ) )
+        task.start()
 
     print("fin capture")
     return capture_uuid
@@ -309,109 +303,116 @@ def save_ia_image(capture_path, index, prompt):
     try:
         source_image_path = Path(capture_path, f"{index}.jpg")
         with Image.open(source_image_path) as source:
-            # Calcul du ratio pour obtenir la taille de l'image originale en 512x512
-            ratio = min(512 / source.size[0], 512 / source.size[1])
-            new_size = (int(source.size[0] * ratio), int(source.size[1] * ratio))
-            source = source.resize(new_size, Image.Resampling.LANCZOS)
             
-            # CrÃÂÃÂ©ation de l'image finale de fond noir en 512x512
-            final_size = (512, 512)
-            final_image = Image.new("RGB", final_size, "black")
+            start = time.time()
+
+            unit0 = webuiapi.ControlNetUnit(input_image=source, 
+                                            module='canny', 
+                                            model='sdxl_canny [a2e6a438]', 
+                                            weight=1, 
+                                            control_mode = 2,
+                                            guidance_end = 1,
+                                            guidance_start = 0,
+                                            threshold_a = 100,
+                                            threshold_b = 200)
+
+            reactor = webuiapi.ReActor(
+                img=source,
+                enable=True,
+                source_faces_index = "0,1,2,3", #2 Comma separated face number(s) from swap-source image
+                faces_index = "0,1,2,3", #3 Comma separated face number(s) for target image (result)
+                model = 'inswapper_128.onnx', # None, #4 model path
+                face_restorer_name = "CodeFormer", #4 Restore Face: None; CodeFormer; GFPGAN
+                face_restorer_visibility = 1, #5 Restore visibility value
+                restore_first = True,  #7 Restore face -> Upscale
+                upscaler_name =  "None",# None, # "R-ESRGAN 4x+", #8 Upscaler (type 'None' if doesn't need), see full list here: http://127.0.0.1:7860/sdapi/v1/script-info -> reactor -> sec.8
+                upscaler_scale = 2,#9 Upscaler scale value
+                upscaler_visibility = 1,
+                swap_in_source = True,
+                swap_in_generated = True,
+                console_logging_level = 2, #13 Console Log Level (0 - min, 1 - med or 2 - max)
+                gender_source = 0, #14 Gender Detection (Source) (0 - No, 1 - Female Only, 2 - Male Only)
+                gender_target = 0, #14 Gender Detection (Target) (0 - No, 1 - Female Only, 2 - Male Only)
+                save_original = False,
+                codeFormer_weight = 1,
+                source_hash_check = True,
+                target_hash_check = True,
+                device = "CUDA", #or CPU
+                mask_face = False,
+                select_source = 0, #IMPORTANT. MUST BE 0 or faceswap won't work
+                face_model = None,
+            )
+
             
-            # Calcul des positions pour centrer l'image source dans l'image finale
-            x = (final_size[0] - new_size[0]) // 2
-            y = (final_size[1] - new_size[1]) // 2
+            result1 = api.txt2img(prompt=prompt["positive"],
+                                negative_prompt=prompt["negative"],
+                                seed=-1,
+                                cfg_scale=1,
+                                steps=9,
+                                width=1150,
+                                height=875,
+                                controlnet_units=[unit0],
+                                restore_faces=False,
+                                reactor=reactor)
+            #capture_uuid = datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
+            filepath = Path(capture_path, f"{index}.ia.jpg")
+            filepathSD = Path(capture_path, f"{index}.iabkp.jpg")
+            result1.image.save(filepath)
+            #Resize sinon image en 872 x 1144
+            imageIA = Image.open(filepath)
+            (width, height) = (1150, 875)
+            imageIA = imageIA.resize((width, height))
+            imageIA.save(filepath)
             
-            # Coller l'image source sur l'image finale
-            final_image.paste(source, (x, y))
-                
-                
-            # PrÃÂÃÂ©paration de l'image pour l'envoi
-            buffered = BytesIO()
-            final_image.save(buffered, format="JPEG")
-            img_str = base64.b64encode(buffered.getvalue())
+            end = time.time()
+            print(str(index) + ": %s seconds ---" % (end - start))
 
             # Envoi de l'image par POST
-            print
-            payload = {"prompt": prompt["positive"],"negative_prompt": prompt["negative"], "loras":json.dumps(prompt["loras"]), "file": img_str}
+            #payload = {"prompt": prompt["positive"],"negative_prompt": prompt["negative"], "loras":json.dumps(prompt["loras"]), "file": img_str}
 
-            available_urls = [
-                    "http://vmgpu.taile7da6.ts.net:5005/api/processing",
-                    "http://vmgpu-1.taile7da6.ts.net:5005/api/processing",
-                    "http://vmgpu-2.taile7da6.ts.net:5005/api/processing",
-                    "http://vmgpu-3.taile7da6.ts.net:5005/api/processing",
-                    "http://vmgpu-4.taile7da6.ts.net:5005/api/processing"
-            ]
-            vmgpu_url = available_urls[0]
 
-            for url in available_urls:
-                try:
-                    r = requests.get(url,timeout=1)
-                    r.raise_for_status()
-                    if r.status_code == 200:
-                        vmgpu_url = url
-                        break
-                except:
-                    pass
-
-            logging.debug(payload)
-            # Timeouts : 1 = temps handshake server, 2 = temps de traitement
-            response = requests.post(url=vmgpu_url, data=payload, timeout=(10,210))
-
-            # Gestion de la rÃÂÃÂ©ponse
-            if response.status_code == 200:
-                # Sauvegarde de l'image reÃÂÃÂ§ue dans le systÃÂÃÂ¨me de fichiers
-                filepath = Path(capture_path, f"{index}.ia.jpg")
-                logging.debug(filepath)
-                with open(filepath, 'wb') as f:
-                    f.write(response.content)
-
-                # Ouverture de l'image reÃÂÃÂ§ue pour traitement
-                with Image.open(filepath) as img:
-                    # Supposer que les bordures noires prennent 124 pixels des cÃÂÃÂ´tÃÂÃÂ©s aprÃÂÃÂ¨s le redimensionnement en 1024x1024
-                    if VERTICAL:
-                        crop_box = (0, 124, 1024, 900)  # Exclure les bordures noires latÃÂÃÂ©rales
-                    else:
-                        crop_box = (124, 0, 900, 1024)  # Exclure les bordures noires latÃÂÃÂ©rales
-                    img_cropped = img.crop(crop_box)
-                    
-                    # Redimensionnement pour obtenir la taille finale de 875x1150
-                    if VERTICAL:
-                        img_final = img_cropped.resize((1150, 875), Image.Resampling.LANCZOS)
-                    else:
-                        img_final = img_cropped.resize((875, 1150), Image.Resampling.LANCZOS)
-                    
-                    # Save the final image after cropping, resizing, and adding the label
-                    font_size = 64
-                    font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", font_size)
-                    draw = ImageDraw.Draw(img_final) 
-                    if VERTICAL:
-                        draw.text((20, 20), prompt["name"],(255, 255, 255), font=font)
-                    else:
-                        draw.text((20, 1100), prompt["name"],(255, 255, 255), font=font)
-                    final_image_path = Path(capture_path, f"{index}.ia.jpg")
-                    img_final.save(final_image_path)
+            # Ouverture de l'image reÃÂÃÂ§ue pour traitement
+            with Image.open(filepath) as img:
                 
-                logging.info(f"Image resized and saved successfully: {final_image_path}")
-            else:
-                logging.error(f"Failed to get a successful response: {response.status_code}")
+                # Save the final image after cropping, resizing, and adding the label
+                font_size = 64
+                font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", font_size)
+                draw = ImageDraw.Draw(img) 
+                if VERTICAL:
+                    draw.text((20, 20), prompt["name"],(255, 255, 255), font=font)
+                else:
+                    draw.text((20, 20), prompt["name"],(255, 255, 255), font=font)
+                img.save(filepath)
+            
+            logging.info(f"Image resized and saved successfully: {filepath}")
     
     except Exception as e:
         logging.error("An exception occurred while processing the image:")
         logging.error(traceback.format_exc())
 
-def capture_to_ia(capture_uuid, jason):
+def threadIA(capture_uuid, id):
+    CAPTURE_PATH = Path(CAPTURE_FOLDER, str(capture_uuid))
+    # mode aléatoire
+    lettres = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K']
+
+    save_ia_image(CAPTURE_PATH, id, config["prompts"][str(id+1)+ str(random.choice(lettres))])
+
+
+def capture_to_ia(capture_uuid):
 
     CAPTURE_PATH = Path(CAPTURE_FOLDER, str(capture_uuid))
-    save_ia_image(CAPTURE_PATH, 0, config["prompts"]["1"+ str(jason[0])])
-    save_ia_image(CAPTURE_PATH, 1, config["prompts"]["2"+ str(jason[1])])
-    save_ia_image(CAPTURE_PATH, 2, config["prompts"]["3"+ str(jason[2])])
-    save_ia_image(CAPTURE_PATH, 3, config["prompts"]["4"+ str(jason[3])])
+    # mode aléatoire
+    lettres = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K']
+
+    save_ia_image(CAPTURE_PATH, 0, config["prompts"]["1"+ str(random.choice(lettres))])
+    save_ia_image(CAPTURE_PATH, 1, config["prompts"]["2"+ str(random.choice(lettres))])
+    save_ia_image(CAPTURE_PATH, 2, config["prompts"]["3"+ str(random.choice(lettres))])
+    save_ia_image(CAPTURE_PATH, 3, config["prompts"]["4"+ str(random.choice(lettres))])
 
 def processImage(capture_uuid, imgName):
     CAPTURE_PATH = Path(CAPTURE_FOLDER, str(capture_uuid))
     img = Image.open(Path(CAPTURE_PATH, imgName))
-    crop = (744, 0, 2232, 1984)
+    crop = (832, 0, 2144, 1728) # Résolution 2592x1728 
     img = img.crop(crop)
     (width, height) = (875, 1150)
     img = img.resize((width, height))
@@ -421,7 +422,8 @@ def processImage(capture_uuid, imgName):
 def processImageVertical(capture_uuid, imgName):
     CAPTURE_PATH = Path(CAPTURE_FOLDER, str(capture_uuid))
     img = Image.open(Path(CAPTURE_PATH, imgName))
-    crop = (164, 0, 2428, 1728)
+    #crop = (164, 0, 2428, 1728) # Résolution 2592x1728 
+    crop = (233, 0, 3223, 2304) # Résolution 3456x2304
     img = img.crop(crop)
     (width, height) = (1150, 875)
     img = img.resize((width, height))
@@ -566,7 +568,7 @@ def main():
             if ARDUINO_JSON:
                 # Commande" via serial de l'arduino
                 jason = {}
-
+                
                 try:
                     if SERIAL.in_waiting > 0:
                         line = SERIAL.readline().decode("utf-8").rstrip()
@@ -591,24 +593,18 @@ def main():
 
             if bStart:
                 
-
                 capture_uuid = capture(CAMERA)
 
-                # Insert table shot
-                try:
-                    conn = db.connect_database()
-                    db.insert_shot(conn, "mode" in jason and jason["mode"] == "ia", jason["pay"], str(capture_uuid), config["id_booth"])
-                    conn.close()
-                except Exception as e:
-                    logging.error("DBFUCK:" + str(e))
-                print("fin db")
-                processImages(capture_uuid)
-                print("fin processImages")
-                if ARDUINO_JSON and "mode" in jason and jason["mode"] == "ia":
-                    capture_to_ia(capture_uuid, jason["styl"])
-                output = capture_to_montage(capture_uuid, ARDUINO_JSON and "mode" in jason and jason["mode"] == "ia")
+                print("wait for IA")
+                startIA = time.time()
+                while threading.active_count() > 1:
+                    time.sleep(1) 
+
+                output = capture_to_montage(capture_uuid, IA or (ARDUINO_JSON and "mode" in jason and jason["mode"] == "ia"))
+                
                 if PRINT:
-                    print_image(capture_uuid)  
+                    print_image(capture_uuid)
+                print("Done: %s seconds ---" % (time.time() - startIA))
                 # Envoi signal de dÃÂ©blocage ÃÂ  l'arduino 
                 if ARDUINO_JSON:
                     try:
