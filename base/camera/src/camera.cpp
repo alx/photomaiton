@@ -21,19 +21,19 @@
 storage parametres;
 
 void auxOn() {
-  #ifdef MEGA
+  //#ifdef MEGA
     digitalWrite(AUX_PIN, HIGH);
-  #else
+  /*#else
     digitalWrite(AUX_PIN, LOW);
-  #endif
+  #endif*/
 }
 
 void auxOff() {
-  #ifdef MEGA
+  //#ifdef MEGA
     digitalWrite(AUX_PIN, LOW);
-  #else
+  /*#else
     digitalWrite(AUX_PIN, HIGH);
-  #endif
+  #endif*/
 }
 
 
@@ -64,13 +64,13 @@ void setup() {
     parametres.totMoney = 0;
     parametres.totStrip = 0;
     parametres.mode = MODE_PAYING;
-    parametres.price_cts = 300;
+    parametres.price_cts = 400;
     parametres.bRunning = false;
     EEPROM.writeBlock(EEPROM_ADRESS, parametres);
   }
   
-  //parametres.price_cts = 400;
-  //parametres.mode = MODE_PAYING;
+  parametres.price_cts = 400;
+  parametres.mode = MODE_PAYING;
   parametres.mode = MODE_FREE;
   EEPROM.updateBlock(EEPROM_ADRESS, parametres);
   
@@ -112,6 +112,7 @@ void loop() {
   // If coin acceptor OK and clic start button.
   if(manageCoinsAndStart(parametres)) {
     auxOn();
+    delay(500);
     #ifdef JSON
       byte pose1 = readRotSwitchByte(ROTSW1_PIN);
       byte pose2 = readRotSwitchByte(ROTSW2_PIN);
@@ -167,6 +168,9 @@ void loop() {
     // 2 more sec before switching aux off.
     delay(2000);
     auxOff();
+    delay(500);
+    //showCross(); //TODO: remove
+    //delay(30000);//TODO: remove
     //showCross();
     #ifdef JSON
       unsigned long currMillis = millis();
@@ -187,6 +191,7 @@ void loop() {
     #endif
     showSmiley();
     enableCoinAcceptor(parametres);
+    showSmiley();
     /*parametres.bRunning = false;
     EEPROM.updateBlock(EEPROM_ADRESS, parametres);*/
   }

@@ -10,7 +10,7 @@
 //#define MEGA
 
 // Uncomment if communication with raspi is with usb link & json
-#define JSON
+//#define JSON
 
 // Coin multiplier
 #define COIN_MULTI 50
@@ -42,6 +42,7 @@
   #define AUX_PIN 2
   #define START_BTN_PIN 7 //Previously 19 (change connector)
   #define CB_PIN 13
+  #define NUMERIC_PIN 8
 #endif
 
 #define ROTSW1_PIN A1
