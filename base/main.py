@@ -23,192 +23,54 @@ import db
 import webuiapi
 import random
 import threading
+import RPi.GPIO as GPIO
+from luma.led_matrix.device import max7219
+from luma.core.interface.serial import spi, noop
+from luma.core.render import canvas
+from luma.core.virtual import viewport
+from luma.core.legacy import text, show_message
+from luma.core.legacy.font import proportional, CP437_FONT, TINY_FONT, SINCLAIR_FONT, LCD_FONT, ATARI_FONT
+import tm1637
+
+# Pins def
+COIN_PIN = 16
+START_PIN = 20
+AUX_PIN = 23
+CB_PIN = 14
+
+
+# constants
+PRICE = 400
+COINS_MULTI = 50
+COINS = PRICE
+WAITFORSTART = False
+START = False
+
+#Globals
+CAMERA = None
+MAX7219 = None
+global CURRENT_PATH,USB_STICK, BKPIMG, BKP_PATH, PHOTO_COUNT,PHOTO_PAUSE,VERTICAL, PROCESS_ASSETS_FOLDER
+global CAPTURE_FOLDER, PROCESS_FILE_BACKGROUND, PROCESS_FILE_MASK, ADD_LOGO,PROCESS_FILE_LOGO1, PROCESS_FILE_LOGO2
+global LOGO1_POS, LOGO2_POS, PROCESS_FILE_MARGIN, PRINT, MARGIN, IA, api
 
 CURRENT_PATH = os.path.dirname(os.path.abspath(__file__))
-parser = argparse.ArgumentParser(description="Read config file path")
-parser.add_argument(
-    "--config",
-    type=str,
-    default=Path(CURRENT_PATH, "config.json"),
-    help="Path to the configuration file"
-)
-args = parser.parse_args()
-
-with open(args.config, "r") as f:
-    config = json.load(f)
-
-USB_STICK = config["usb_stick"]  # use of usb storage
-if USB_STICK:
-    CURRENT_PATH = os.path.abspath(config["usb_stick_adr"])
-    
-BKPIMG = config["bkpimg"]  # store img in a folder.
-if BKPIMG:
-    BKP_PATH = os.path.abspath(config["bkp_path"])
-
-LOG_FILENAME = Path(CURRENT_PATH, config["log_filename"])
+LOG_FILENAME = Path(CURRENT_PATH, "log.txt")
 logging.basicConfig(
     format="%(asctime)s %(levelname)s %(message)s",
     filename=LOG_FILENAME,
     level=logging.DEBUG,
     datefmt="%Y-%m-%d %H:%M:%S",
 )
+#output sur console
+console = logging.StreamHandler()
+console.setLevel(logging.DEBUG)
+format=logging.Formatter("%(asctime)s %(levelname)s %(message)s")
+console.setFormatter(format)
+logging.getLogger("").addHandler(console)
+#deactivate Pillow logging
+logging.getLogger('PIL').setLevel(logging.WARNING)
 
-PHOTO_COUNT = config["photo_count"]  # number of photos to take
-PHOTO_PAUSE = config["photo_pause"]  # in seconds
-ARDUINO_JSON = config["arduino_json"]  # communicate with serial & json (unless with gpio)
-VERTICAL = config["vertical"]  # strip ÃÂ  la verticale
-
-# Folder containing background
-PROCESS_ASSETS_FOLDER = Path(CURRENT_PATH, "assets/")
-if not PROCESS_ASSETS_FOLDER.exists():
-    os.makedirs(PROCESS_ASSETS_FOLDER)
-
-# Root folder for `capture_uuid` captures
-CAPTURE_FOLDER = Path(CURRENT_PATH, "captures/")
-if not CAPTURE_FOLDER.exists():
-    os.makedirs(CAPTURE_FOLDER)
-
-# Create background image if it doesn't exist
-try:
-    PROCESS_FILE_BACKGROUND = Image.open(Path(PROCESS_ASSETS_FOLDER, "background.jpg"))
-except FileNotFoundError:
-    PROCESS_FILE_BACKGROUND = Image.new("RGB", (3600, 2400), color="white")
-    PROCESS_FILE_BACKGROUND.save(Path(PROCESS_ASSETS_FOLDER, "background.jpg"))
-
-# Create mask image if it doesn't exist
-try:
-    PROCESS_FILE_MASK = Image.open(Path(PROCESS_ASSETS_FOLDER, "maskVertical.jpg"))
-except FileNotFoundError:
-    PROCESS_FILE_MASK = Image.new("RGB", (875, 1150), color="white")
-    PROCESS_FILE_MASK.save(Path(PROCESS_ASSETS_FOLDER, "mask.jpg"))
-
-# Create logo image if it doesn't exist
-ADD_LOGO = config["add_logo"]
-if ADD_LOGO:
-    LOGO1_NAME = config["logo1_name"]
-    LOGO2_NAME = config["logo2_name"]
-    LOGO1_POS = config["logo1_pos"]
-    LOGO2_POS = config["logo2_pos"]
-    try:
-        PROCESS_FILE_LOGO1 = Image.open(Path(PROCESS_ASSETS_FOLDER, LOGO1_NAME))
-        PROCESS_FILE_LOGO2 = Image.open(Path(PROCESS_ASSETS_FOLDER, LOGO2_NAME))
-        if VERTICAL:
-            PROCESS_FILE_LOGO1 = PROCESS_FILE_LOGO1.rotate(90, expand=True)
-            PROCESS_FILE_LOGO2 = PROCESS_FILE_LOGO2.rotate(90, expand=True)
-    except FileNotFoundError:
-        PROCESS_FILE_LOGO1 = Image.new("RGB", (1, 1), color="white")
-        PROCESS_FILE_LOGO1.save(Path(PROCESS_ASSETS_FOLDER, "logo1.png"))
-        PROCESS_FILE_LOGO2 = Image.new("RGB", (1, 1), color="white")
-        PROCESS_FILE_LOGO2.save(Path(PROCESS_ASSETS_FOLDER, "logo2.png"))
-
-# Final image for print (dnp ds 40 eat the borders / fond perdu)
-try:
-    PROCESS_FILE_MARGIN = Image.open(Path(PROCESS_ASSETS_FOLDER, "margin.jpg"))
-except FileNotFoundError:
-    PROCESS_FILE_MARGIN = Image.new("RGB", (3700, 2500), color="white")
-    PROCESS_FILE_MARGIN.save(Path(PROCESS_ASSETS_FOLDER, "margin.png"))
-
-PRINT = config["print"]
-MARGIN = config["margin"]
-
-# Raspberry Pi
-ON_RASP = False  # will be set to True if running on Raspberry Pi
-GPIO_INPUT = 15  # GPIO pin to use for input
-
-try:
-    import RPi.GPIO as GPIO
-
-    GPIO.setmode(GPIO.BCM)
-    GPIO.setup(GPIO_INPUT, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
-    ON_RASP = True
-except:
-    logging.debug("Error importing RPi.GPIO")
-
-CAMERA = None
-SERIAL = None # Serial arduino
-
-
-#Api serveur IA
-IA = config["ia"]
-api = webuiapi.WebUIApi()
-
-# create API client with custom host, port
-api = webuiapi.WebUIApi(host='uncanny.taile7da6.ts.net', port=7860, sampler = "Euler a")
-
-print(api.get_options()['sd_model_checkpoint'])
-
-def connect_to_arduino():
-    def find_arduino_port():
-        # Obtient la liste des ports sÃÂ©rie disponibles
-        available_ports = list_ports.comports()
-
-        # ItÃÂ¨re sur la liste des ports
-        for port in available_ports:
-            try:
-                # Teste la liaison sÃÂ©rie pour le port actuel
-                SERIAL = serial.Serial(port.device, 115200, timeout=1)
-                SERIAL.reset_input_buffer()
-                # Si la liaison sÃÂ©rie est rÃÂ©ussie, retourne le port
-                return port.device
-            except:
-                print("Error serial arduino {0}".format(port.device))
-
-        # Retourne None si aucun port n'a ÃÂ©tÃÂ© trouvÃÂ©
-        return None
-
-    # Utilise la fonction pour trouver le port sÃÂ©rie
-    arduino_port = find_arduino_port()
-
-    if arduino_port:
-        try:
-            SERIAL = serial.Serial(arduino_port, 115200, timeout=1)
-            SERIAL.reset_input_buffer()
-            # Effectue d'autres opÃÂ©rations avec la liaison sÃÂ©rie ÃÂ©tablie
-            return SERIAL
-        except:
-            print("Error connecting to Arduino")
-            SERIAL = None
-            return None
-    else:
-        print("No Arduino port found")
-        SERIAL = None
-        return None
-
-def capture_webcam(
-    nb_photos=1,
-    photo_pause=0,
-    filename="capture.jpg",
-    capture_id=0,
-    width=640,
-    height=480,
-):
-    cap = cv2.VideoCapture(capture_id)
-    cap.set(3, width)
-    cap.set(4, height)
-
-    capture_uuid = uuid.uuid4()
-    CAPTURE_PATH = Path(CAPTURE_FOLDER, str(capture_uuid))
-    if not CAPTURE_PATH.exists():
-        os.makedirs(CAPTURE_PATH)
-
-    if cap.isOpened():
-        for i in range(nb_photos):
-            if nb_photos > 1:
-                photo_filename = str(i) + ".jpg"
-            else:
-                photo_filename = "capture.jpg"
-
-            _, frame = cap.read()
-            cap.release()  # releasing camera immediately after capturing picture
-            if _ and frame is not None:
-                cv2.imwrite(str(Path(CAPTURE_PATH, photo_filename)), frame)
-
-            time.sleep(photo_pause)
-
-    return capture_uuid
-
-
-# Only run if on Raspberry Pi
+# init apn
 def init_camera():
     logging.info("Camera init - Wait loop for camera")
     
@@ -227,7 +89,7 @@ def init_camera():
         # no camera, try again in 2 seconds
         time.sleep(2)
 
-    # capture pour enclencher le process sinon ÃÂÃÂ§a le fait pas
+    # capture pour enclencher le process sinon ÃÂÃÂÃÂÃÂ§a le fait pas
     logging.info("Camera init - first capture")
     CAMERA.capture(gp.GP_CAPTURE_IMAGE)
 
@@ -238,6 +100,8 @@ def init_camera():
 
 
 def capture(camera):
+    global MAX7219
+    
     #capture_uuid = uuid.uuid4()
     capture_uuid = datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
     CAPTURE_PATH = Path(CAPTURE_FOLDER, str(capture_uuid))
@@ -247,21 +111,20 @@ def capture(camera):
 
     logging.info("Capture - Start shooting - " + str(capture_uuid))
     nextShot = time.time()
+    current = nextShot
     for image_index in range(PHOTO_COUNT):
-        # arduino show countdown order
-        if ARDUINO_JSON:
-            try:
-                SERIAL.write("3".encode('utf-8'))
-            except Exception as e:
-                logging.debug(traceback.format_exc());
-        
-        current = time.time()
-        while  PHOTO_PAUSE >  current - nextShot:
-            current = time.time()
-
+        logging.info("Shot " + str(image_index))
         filename = str(image_index) + ".jpg"
         target = os.path.join(CAPTURE_PATH, filename)
-        logging.info("Capture - Copying image to" + str(target))
+        
+        #countdown
+        MAX7219.clear()
+        for second in reversed(range(1,PHOTO_PAUSE + 1)):
+            MAX7219.clear()
+            with canvas(MAX7219) as draw:
+                text(draw, (1, 1), str(second), fill="white", font=proportional(CP437_FONT))
+            time.sleep(1)
+        showSmiley()
 
         # capture
         file_path = camera.capture(gp.GP_CAPTURE_IMAGE)
@@ -270,33 +133,25 @@ def capture(camera):
                 file_path.folder, file_path.name
             )
         )
-        print("download")
         # download
         camera_file = camera.file_get(
             file_path.folder, file_path.name, gp.GP_FILE_TYPE_NORMAL
         )
-        print("save")
         camera_file.save(target)
 
-        nextShot = time.time()
-        print("process image")
+        logging.info("process image")
         if not VERTICAL:
             im1 = processImage(capture_uuid, str(image_index) + ".jpg")
         else:
             im1 = processImageVertical(capture_uuid, str(image_index) + ".jpg")
+            
+        if IA:
+            logging.info("process ia")
+            task = threading.Thread( target = threadIA, name=str(image_index), args   = ( capture_uuid, image_index ) )
+            task.start()
 
-        print("process ia")
-        task = threading.Thread( target = threadIA, name=str(image_index), args   = ( capture_uuid, image_index ) )
-        task.start()
-
-    print("fin capture")
+    logging.info("fin capture")
     return capture_uuid
-
-
-def capture_files(capture_uuid):
-    CAPTURE_PATH = Path(CAPTURE_FOLDER, str(capture_uuid))
-    return [str(x) for x in CAPTURE_PATH.iterdir() if x.is_file()]
-
 
     
 def save_ia_image(capture_path, index, prompt):
@@ -365,13 +220,9 @@ def save_ia_image(capture_path, index, prompt):
             imageIA.save(filepath)
             
             end = time.time()
-            print(str(index) + ": %s seconds ---" % (end - start))
+            logging.info(str(index) + ": %s seconds ---" % (end - start))
 
-            # Envoi de l'image par POST
-            #payload = {"prompt": prompt["positive"],"negative_prompt": prompt["negative"], "loras":json.dumps(prompt["loras"]), "file": img_str}
-
-
-            # Ouverture de l'image reÃÂÃÂ§ue pour traitement
+            # Ouverture de l'image reÃÂÃÂÃÂÃÂ§ue pour traitement
             with Image.open(filepath) as img:
                 
                 # Save the final image after cropping, resizing, and adding the label
@@ -392,7 +243,8 @@ def save_ia_image(capture_path, index, prompt):
 
 def threadIA(capture_uuid, id):
     CAPTURE_PATH = Path(CAPTURE_FOLDER, str(capture_uuid))
-    # mode aléatoire
+    
+    # mode alÃ©atoire
     lettres = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K']
 
     save_ia_image(CAPTURE_PATH, id, config["prompts"][str(id+1)+ str(random.choice(lettres))])
@@ -401,7 +253,7 @@ def threadIA(capture_uuid, id):
 def capture_to_ia(capture_uuid):
 
     CAPTURE_PATH = Path(CAPTURE_FOLDER, str(capture_uuid))
-    # mode aléatoire
+    # mode alÃ©atoire
     lettres = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K']
 
     save_ia_image(CAPTURE_PATH, 0, config["prompts"]["1"+ str(random.choice(lettres))])
@@ -412,7 +264,7 @@ def capture_to_ia(capture_uuid):
 def processImage(capture_uuid, imgName):
     CAPTURE_PATH = Path(CAPTURE_FOLDER, str(capture_uuid))
     img = Image.open(Path(CAPTURE_PATH, imgName))
-    crop = (832, 0, 2144, 1728) # Résolution 2592x1728 
+    crop = (832, 0, 2144, 1728) # RÃ©solution 2592x1728 
     img = img.crop(crop)
     (width, height) = (875, 1150)
     img = img.resize((width, height))
@@ -422,8 +274,8 @@ def processImage(capture_uuid, imgName):
 def processImageVertical(capture_uuid, imgName):
     CAPTURE_PATH = Path(CAPTURE_FOLDER, str(capture_uuid))
     img = Image.open(Path(CAPTURE_PATH, imgName))
-    #crop = (164, 0, 2428, 1728) # Résolution 2592x1728 
-    crop = (233, 0, 3223, 2304) # Résolution 3456x2304
+    #crop = (164, 0, 2428, 1728) # RÃ©solution 2592x1728 
+    crop = (233, 0, 3223, 2304) # RÃ©solution 3456x2304
     img = img.crop(crop)
     (width, height) = (1150, 875)
     img = img.resize((width, height))
@@ -444,6 +296,7 @@ def processImages(capture_uuid):
 
 
 def capture_to_montage(capture_uuid, bIA):
+    logging.info("capture_to_montage")
     CAPTURE_PATH = Path(CAPTURE_FOLDER, str(capture_uuid))
     im1 = Image.open(Path(CAPTURE_PATH, "0.jpg"))
     im2 = Image.open(Path(CAPTURE_PATH, "1.jpg"))
@@ -468,16 +321,14 @@ def capture_to_montage(capture_uuid, bIA):
         imia4 = im4.convert("L")
 
     if BKPIMG:
-        idPrint = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-        #PROCESS_FILE_MARGIN.save(Path(BKP_PATH, idPrint + "_print.jpg"), quality=95)
-        #im1.save(Path(BKP_PATH, idPrint + "_1.jpg"), quality=95)
-        #im2.save(Path(BKP_PATH, idPrint + "_2.jpg"), quality=95)
-        #im3.save(Path(BKP_PATH, idPrint + "_3.jpg"), quality=95)
-        #im4.save(Path(BKP_PATH, idPrint + "_4.jpg"), quality=95)
-        imia1.save(Path(BKP_PATH, idPrint + "_1bis.jpg"), quality=95)
-        imia2.save(Path(BKP_PATH, idPrint + "_2bis.jpg"), quality=95)
-        imia3.save(Path(BKP_PATH, idPrint + "_3bis.jpg"), quality=95)
-        imia4.save(Path(BKP_PATH, idPrint + "_4bis.jpg"), quality=95)
+        im1.save(Path(BKP_PATH, str(capture_uuid) + "_1.jpg"), quality=95)
+        im2.save(Path(BKP_PATH, str(capture_uuid) + "_2.jpg"), quality=95)
+        im3.save(Path(BKP_PATH, str(capture_uuid) + "_3.jpg"), quality=95)
+        im4.save(Path(BKP_PATH, str(capture_uuid) + "_4.jpg"), quality=95)
+        imia1.save(Path(BKP_PATH, str(capture_uuid) + "_1_NB.jpg"), quality=95)
+        imia2.save(Path(BKP_PATH, str(capture_uuid) + "_2_NB.jpg"), quality=95)
+        imia3.save(Path(BKP_PATH, str(capture_uuid) + "_3_NB.jpg"), quality=95)
+        imia4.save(Path(BKP_PATH, str(capture_uuid) + "_4_NB.jpg"), quality=95)
 
     #rotate si mode horizontal
     if VERTICAL:
@@ -515,17 +366,8 @@ def capture_to_montage(capture_uuid, bIA):
     PROCESS_FILE_MARGIN.save(Path(CAPTURE_PATH, "print.jpg"), quality=95)
 
     #BACKUP
-    #if BKPIMG:
-        #idPrint = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-        #PROCESS_FILE_MARGIN.save(Path(BKP_PATH, idPrint + "_print.jpg"), quality=95)
-        #im1.save(Path(BKP_PATH, idPrint + "_1.jpg"), quality=95)
-        #im2.save(Path(BKP_PATH, idPrint + "_2.jpg"), quality=95)
-        #im3.save(Path(BKP_PATH, idPrint + "_3.jpg"), quality=95)
-        #im4.save(Path(BKP_PATH, idPrint + "_4.jpg"), quality=95)
-        #imia1.save(Path(BKP_PATH, idPrint + "_1bis.jpg"), quality=95)
-        #imia2.save(Path(BKP_PATH, idPrint + "_2bis.jpg"), quality=95)
-        #imia3.save(Path(BKP_PATH, idPrint + "_3bis.jpg"), quality=95)
-        #imia4.save(Path(BKP_PATH, idPrint + "_4bis.jpg"), quality=95)
+    if BKPIMG:
+        PROCESS_FILE_MARGIN.save(Path(BKP_PATH, str(capture_uuid) + "_print.jpg"), quality=95)
 
 def print_image(capture_uuid):
     # impression
@@ -552,82 +394,244 @@ def print_image(capture_uuid):
     # while conn.getJobs().get(print_id, None):
     # sleep(1)
 
+def showArrow():
+    global MAX7219,PROCESS_ASSETS_FOLDER
+    arrowImg = Image.open(Path(PROCESS_ASSETS_FOLDER, "arrow.png"))
+    arrowImg = arrowImg.convert('1')
+    MAX7219.display(arrowImg)
 
+def showSmiley():
+    global MAX7219, PROCESS_ASSETS_FOLDER
+    smileyImg = Image.open(Path(PROCESS_ASSETS_FOLDER, "smiley.png"))
+    smileyImg = smileyImg.convert('1')
+    MAX7219.display(smileyImg)
+
+def CB_interrupt(channel):
+    global COINS, WAITFORSTART
+    #Calc signal duration
+    startMillis = time.monotonic()
+    endMillis = startMillis
+    while GPIO.input(CB_PIN):
+        endMillis = time.monotonic()
+    startMillis = startMillis * 1000
+    endMillis = endMillis * 1000
+    logging.debug("CB duration=")
+    logging.debug(endMillis - startMillis)
+    if endMillis - startMillis > 85 and endMillis - startMillis < 115:
+        WAITFORSTART = True
+        COINS = 0
+        showArrow()
+
+def coin_interrupt(channel):
+    global COINS, COINS_MULTI, START, WAITFORSTART, TM1637
+    
+    COINS = COINS - COINS_MULTI
+    
+    if COINS <= 0:
+        WAITFORSTART = True
+        COINS = 0
+        showArrow()
+    
+        
+def start_interrupt(channel):
+    global START, WAITFORSTART
+    if WAITFORSTART :
+        START = True
+        
+    
+def initPhotobooth():
+    logging.info("initPhotobooth")
+    global CAMERA, MAX7219, TM1637
+    
+    logging.info("initGPIO")
+    GPIO.setmode(GPIO.BCM)
+    GPIO.setup(COIN_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+    GPIO.setup(START_PIN, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
+    GPIO.setup(CB_PIN, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
+    GPIO.setup(AUX_PIN, GPIO.OUT)
+    GPIO.output(AUX_PIN, False)
+    GPIO.add_event_detect(COIN_PIN, GPIO.FALLING, callback=coin_interrupt)
+    GPIO.add_event_detect(START_PIN, GPIO.RISING, callback=start_interrupt)
+    GPIO.add_event_detect(CB_PIN, GPIO.RISING, callback=CB_interrupt)
+    
+    #7 segment
+    logging.info("initSegment")
+    TM1637 = tm1637.TM1637(clk=15, dio=18)
+    TM1637.brightness(1)
+    TM1637.show(str("    "), colon=True)
+    TM1637.show(" " + str(PRICE), colon=True)
+    
+    #led matrix
+    logging.info("initLedMatrix")
+    serial = spi(port=0, device=0, gpio=noop())
+    MAX7219 = max7219(serial)
+
+    # init camera
+    CAMERA = init_camera()
+    
+    #init config
+    initConfig()
+    
+def initConfig():
+    logging.info("initConfig")
+    global START, WAITFORSTART, PRICE
+    global config, CURRENT_PATH, USB_STICK, BKPIMG, BKP_PATH, PHOTO_COUNT,PHOTO_PAUSE,VERTICAL, PROCESS_ASSETS_FOLDER
+    global CAPTURE_FOLDER, PROCESS_FILE_BACKGROUND, PROCESS_FILE_MASK, ADD_LOGO,PROCESS_FILE_LOGO1, PROCESS_FILE_LOGO2
+    global LOGO1_POS, LOGO2_POS, PROCESS_FILE_MARGIN, PRINT, MARGIN, IA, api
+    
+    #config json
+    parser = argparse.ArgumentParser(description="Read config file path")
+    parser.add_argument(
+        "--config",
+        type=str,
+        default=Path(CURRENT_PATH, "config.json"),
+        help="Path to the configuration file"
+    )
+    args = parser.parse_args()
+
+    with open(args.config, "r") as f:
+        config = json.load(f)
+
+    USB_STICK = config["usb_stick"]  # use of usb storage
+    if USB_STICK:
+        CURRENT_PATH = os.path.abspath(config["usb_stick_adr"])
+        
+    BKPIMG = config["bkpimg"]  # store img in a folder.
+    if BKPIMG:
+        BKP_PATH = os.path.abspath(config["bkp_path"])
+
+
+    PHOTO_COUNT = config["photo_count"]  # number of photos to take
+    PHOTO_PAUSE = config["photo_pause"]  # in seconds
+    VERTICAL = config["vertical"]  # strip ÃÂÃÂ  la verticale
+
+    # Folder containing background
+    PROCESS_ASSETS_FOLDER = Path(CURRENT_PATH, "assets/")
+    if not PROCESS_ASSETS_FOLDER.exists():
+        os.makedirs(PROCESS_ASSETS_FOLDER)
+
+    # Root folder for `capture_uuid` captures
+    CAPTURE_FOLDER = Path(CURRENT_PATH, "captures/")
+    if not CAPTURE_FOLDER.exists():
+        os.makedirs(CAPTURE_FOLDER)
+
+    # Create background image if it doesn't exist
+    try:
+        PROCESS_FILE_BACKGROUND = Image.open(Path(PROCESS_ASSETS_FOLDER, "background.jpg"))
+    except FileNotFoundError:
+        PROCESS_FILE_BACKGROUND = Image.new("RGB", (3600, 2400), color="white")
+        PROCESS_FILE_BACKGROUND.save(Path(PROCESS_ASSETS_FOLDER, "background.jpg"))
+
+    # Create mask image if it doesn't exist
+    try:
+        PROCESS_FILE_MASK = Image.open(Path(PROCESS_ASSETS_FOLDER, "maskVertical.jpg"))
+    except FileNotFoundError:
+        PROCESS_FILE_MASK = Image.new("RGB", (875, 1150), color="white")
+        PROCESS_FILE_MASK.save(Path(PROCESS_ASSETS_FOLDER, "mask.jpg"))
+
+    # Create logo image if it doesn't exist
+    ADD_LOGO = config["add_logo"]
+    if ADD_LOGO:
+        LOGO1_NAME = config["logo1_name"]
+        LOGO2_NAME = config["logo2_name"]
+        LOGO1_POS = config["logo1_pos"]
+        LOGO2_POS = config["logo2_pos"]
+        try:
+            PROCESS_FILE_LOGO1 = Image.open(Path(PROCESS_ASSETS_FOLDER, LOGO1_NAME))
+            PROCESS_FILE_LOGO2 = Image.open(Path(PROCESS_ASSETS_FOLDER, LOGO2_NAME))
+            if VERTICAL:
+                PROCESS_FILE_LOGO1 = PROCESS_FILE_LOGO1.rotate(90, expand=True)
+                PROCESS_FILE_LOGO2 = PROCESS_FILE_LOGO2.rotate(90, expand=True)
+        except FileNotFoundError:
+            PROCESS_FILE_LOGO1 = Image.new("RGB", (1, 1), color="white")
+            PROCESS_FILE_LOGO1.save(Path(PROCESS_ASSETS_FOLDER, "logo1.png"))
+            PROCESS_FILE_LOGO2 = Image.new("RGB", (1, 1), color="white")
+            PROCESS_FILE_LOGO2.save(Path(PROCESS_ASSETS_FOLDER, "logo2.png"))
+
+    # Final image for print (dnp ds 40 eat the borders / fond perdu)
+    try:
+        PROCESS_FILE_MARGIN = Image.open(Path(PROCESS_ASSETS_FOLDER, "margin.jpg"))
+    except FileNotFoundError:
+        PROCESS_FILE_MARGIN = Image.new("RGB", (3700, 2500), color="white")
+        PROCESS_FILE_MARGIN.save(Path(PROCESS_ASSETS_FOLDER, "margin.png"))
+
+    PRINT = config["print"]
+    MARGIN = config["margin"]
+
+    #Api serveur IA
+    IA = config["ia"]
+    if IA:
+        logging.info("connexion serveur IA")
+        time.sleep(10)
+        api = webuiapi.WebUIApi()
+
+        # create API client with custom host, port
+        api = webuiapi.WebUIApi(host='uncanny.taile7da6.ts.net', port=7860, sampler = "Euler a")
+        logging.info("Serveur IA OK")
+
+    WAITFORSTART = PRICE == 0
+
+    if WAITFORSTART:
+        showArrow()
+    else:
+        showSmiley()
+        
+    
 def main():
-    if ON_RASP:
-        # init camera
-        global CAMERA
-        CAMERA = init_camera()
-        global SERIAL
-        if ARDUINO_JSON:
-            SERIAL = connect_to_arduino()
 
-        # Boucle de la mort
-        while True:
-            bStart = False
-            if ARDUINO_JSON:
-                # Commande" via serial de l'arduino
-                jason = {}
-                
-                try:
-                    if SERIAL.in_waiting > 0:
-                        line = SERIAL.readline().decode("utf-8").rstrip()
-                        print(line)
-                        try:
-                            jason = json.loads(line)
-                        except json.decoder.JSONDecodeError:
-                            logging.info("Not json:" + str(line))
-                        print("json:" + str(jason))
-                        logging.info("json:" + str(jason))
-
-                        if "cmd" in jason and jason["cmd"] == "startShot":
-                            bStart = True
-                except Exception:
-                    print("Serial Close")
-                    if SERIAL is not None:
-                        SERIAL.close()
-                    SERIAL = connect_to_arduino()
-            else:
-                if GPIO.input(15):
-                    bStart = True
-
-            if bStart:
-                
-                capture_uuid = capture(CAMERA)
-
-                print("wait for IA")
-                startIA = time.time()
+    global START, WAITFORSTART, COINS, CAMERA, MAX7219, TM1637, IA
+    
+    lastRefresh = time.time()
+    
+    # Boucle de la mort
+    while True:
+        
+        #refresh Segment
+        currTime = time.time()
+        if currTime - lastRefresh >= 0.5:
+            TM1637.show(" " + str(COINS), colon=True)
+            lastRefresh = currTime
+        
+        if START:
+            logging.info("Start sequence")
+            GPIO.output(AUX_PIN, True)
+            TM1637.show("BUSY", colon=False)
+            capture_uuid = capture(CAMERA)
+            
+            startIA = time.time()
+            
+            if IA:
+                logging.info("Process:" + str(threading.active_count()))
+                logging.info("wait for IA")
                 while threading.active_count() > 1:
                     time.sleep(1) 
 
-                output = capture_to_montage(capture_uuid, IA or (ARDUINO_JSON and "mode" in jason and jason["mode"] == "ia"))
-                
-                if PRINT:
-                    print_image(capture_uuid)
-                print("Done: %s seconds ---" % (time.time() - startIA))
-                # Envoi signal de dÃÂ©blocage ÃÂ  l'arduino 
-                if ARDUINO_JSON:
-                    try:
-                        if SERIAL is not None:
-                            SERIAL.write("4".encode('utf-8'))
-                            SERIAL.close()
-                        SERIAL = connect_to_arduino()
-                    except Exception as e:
-                        logging.debug(traceback.format_exc());   
+            output = capture_to_montage(capture_uuid, IA)
+            
+            if PRINT:
+                print_image(capture_uuid)
+            logging.info("Done: %s seconds ---" % (time.time() - startIA))
 
-        return 0
-    else:
-        logging.debug("Not running on Raspberry Pi")
-        capture_uuid = capture_webcam()
-        for capture_filepath in capture_files(capture_uuid):
-            print(capture_filepath)
-            if MASTODON_ENABLE:
-                output = capture_to_toot(capture_filepath)
-        return 1
+            GPIO.output(AUX_PIN, False)
+
+            #Re init
+            START = False
+            WAITFORSTART = PRICE == 0
+            COINS = PRICE
+            if WAITFORSTART:
+                showArrow()
+            else:
+                showSmiley()
+            
+    return 0
 
 
 if __name__ == "__main__":
+    print("START")
+    initPhotobooth()
     main()
+    GPIO.cleanup()
     logging.info("Stop")
+
 
 

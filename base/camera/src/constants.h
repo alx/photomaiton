@@ -15,6 +15,9 @@
 // Coin multiplier
 #define COIN_MULTI 50
 
+// number of photos taken
+#define NB_PHOTOS 4
+
 //PINS
 
 #define STRIP_PIN 9 // Chatoyance

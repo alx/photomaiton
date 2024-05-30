@@ -42,6 +42,8 @@ void setup() {
   Serial.begin(115200);
   Serial.println(F("Start"));
 
+  pinMode(NUMERIC_PIN, OUTPUT);
+
   //Aux light
   pinMode(AUX_PIN, OUTPUT);
   auxOff();
@@ -69,9 +71,9 @@ void setup() {
     EEPROM.writeBlock(EEPROM_ADRESS, parametres);
   }
   
-  parametres.price_cts = 400;
+  parametres.price_cts = 500;
   parametres.mode = MODE_PAYING;
-  parametres.mode = MODE_FREE;
+  //parametres.mode = MODE_FREE;
   EEPROM.updateBlock(EEPROM_ADRESS, parametres);
   
   disableCoinAcceptor();
@@ -127,7 +129,7 @@ void loop() {
 
     bool bClassic = digitalRead(SELECTOR_PIN);
 
-    for(byte i = 0; i < 4;i++){
+    for(byte i = 0; i < NB_PHOTOS;i++){
       #ifdef JSON
         if(!bClassic){
           lightOne(112 - pose1, 255, 0, 0);

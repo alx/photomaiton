@@ -151,8 +151,11 @@ void coinInterrupt(){
   //unsigned long currentMillis = millis();
   // Check the duration from previous pulse. Avoid pulse from static electricity.
   //unsigned long difference = currentMillis - oldInterruptMillis;
-  lastInterrupt = millis();
-  //if(difference < 135 && difference >125){
+  /*unsigned long end = millis();
+  while(digitalRead(COIN_PIN)==true){
+    end = millis();
+  }
+  if(millis() - end < 10){*/
     cents += bCoinEnabled ? COIN_MULTI : 0;
   //}
   if(cents > PRICE_CTS){
