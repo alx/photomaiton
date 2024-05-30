@@ -283,16 +283,12 @@ def processImageVertical(capture_uuid, imgName):
     return img
 
 def processImages(capture_uuid):
-    if not VERTICAL:
-        im1 = processImage(capture_uuid, "0.jpg")
-        im2 = processImage(capture_uuid, "1.jpg")
-        im3 = processImage(capture_uuid, "2.jpg")
-        im4 = processImage(capture_uuid, "3.jpg")
-    else:
-        im1 = processImageVertical(capture_uuid, "0.jpg")
-        im2 = processImageVertical(capture_uuid, "1.jpg")
-        im3 = processImageVertical(capture_uuid, "2.jpg")
-        im4 = processImageVertical(capture_uuid, "3.jpg")
+    for i in range(PHOTO_COUNT):
+        filename = f"{i}.jpg"  # Construction du nom de fichier
+        if not VERTICAL:
+            image = processImage(capture_uuid, filename)
+        else:
+            image = processImageVertical(capture_uuid, filename)
 
 
 def capture_to_montage(capture_uuid):
