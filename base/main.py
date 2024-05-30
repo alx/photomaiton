@@ -295,79 +295,52 @@ def processImages(capture_uuid):
         im4 = processImageVertical(capture_uuid, "3.jpg")
 
 
-def capture_to_montage(capture_uuid, bIA):
-    logging.info("capture_to_montage")
+def capture_to_montage(capture_uuid):
     CAPTURE_PATH = Path(CAPTURE_FOLDER, str(capture_uuid))
-    im1 = Image.open(Path(CAPTURE_PATH, "0.jpg"))
-    im2 = Image.open(Path(CAPTURE_PATH, "1.jpg"))
-    im3 = Image.open(Path(CAPTURE_PATH, "2.jpg"))
-    im4 = Image.open(Path(CAPTURE_PATH, "3.jpg"))
-    
-    try:
-        imia1 = Image.open(Path(CAPTURE_PATH, "0.ia.jpg"))
-    except FileNotFoundError:
-        imia1 = im1.convert("L")
-    try:
-        imia2 = Image.open(Path(CAPTURE_PATH, "1.ia.jpg"))
-    except FileNotFoundError:
-        imia2 = im2.convert("L")
-    try:
-        imia3 = Image.open(Path(CAPTURE_PATH, "2.ia.jpg"))
-    except FileNotFoundError:
-        imia3 = im3.convert("L")
-    try:
-        imia4 = Image.open(Path(CAPTURE_PATH, "3.ia.jpg"))
-    except FileNotFoundError:
-        imia4 = im4.convert("L")
+    images = []
+    images_ia = []
+
+    for i in range(PHOTO_COUNT):
+        # Récupère l'image normale
+        img_path = Path(CAPTURE_PATH, f"{i}.jpg")
+        img = Image.open(img_path)
+        images.append(img)
+
+        # Essaie de récupérer l'image traitée par IA ou crée une version en niveau de gris
+        try:
+            img_ia = Image.open(Path(CAPTURE_PATH, f"{i}.ia.jpg"))
+        except FileNotFoundError:
+            img_ia = img.convert("L")
+        images_ia.append(img_ia)
 
     if BKPIMG:
-        im1.save(Path(BKP_PATH, str(capture_uuid) + "_1.jpg"), quality=95)
-        im2.save(Path(BKP_PATH, str(capture_uuid) + "_2.jpg"), quality=95)
-        im3.save(Path(BKP_PATH, str(capture_uuid) + "_3.jpg"), quality=95)
-        im4.save(Path(BKP_PATH, str(capture_uuid) + "_4.jpg"), quality=95)
-        imia1.save(Path(BKP_PATH, str(capture_uuid) + "_1_NB.jpg"), quality=95)
-        imia2.save(Path(BKP_PATH, str(capture_uuid) + "_2_NB.jpg"), quality=95)
-        imia3.save(Path(BKP_PATH, str(capture_uuid) + "_3_NB.jpg"), quality=95)
-        imia4.save(Path(BKP_PATH, str(capture_uuid) + "_4_NB.jpg"), quality=95)
+        for idx, img_ia in enumerate(images_ia):
+            img.save(Path(BKP_PATH, f"{capture_uuid}_{idx+1}.jpg"), quality=95)
+            img_ia.save(Path(BKP_PATH, f"{capture_uuid}_{idx+1}NB.jpg"), quality=95)
 
-    #rotate si mode horizontal
     if VERTICAL:
-        im1 = im1.rotate(90, expand=True)
-        im2 = im2.rotate(90, expand=True)
-        im3 = im3.rotate(90, expand=True)
-        im4 = im4.rotate(90, expand=True)
-        imia1 = imia1.rotate(90, expand=True)
-        imia2 = imia2.rotate(90, expand=True)
-        imia3 = imia3.rotate(90, expand=True)
-        imia4 = imia4.rotate(90, expand=True)
-    
-    mask = PROCESS_FILE_MASK.resize(im1.size)
-    mask = mask.convert("L")
+        images = [img.rotate(90, expand=True) for img in images]
+        images_ia = [img.rotate(90, expand=True) for img in images_ia]
 
-    # Couleur
-    PROCESS_FILE_BACKGROUND.paste(im1, (20, 20), mask)
-    PROCESS_FILE_BACKGROUND.paste(im2, (915, 20), mask)
-    PROCESS_FILE_BACKGROUND.paste(im3, (1810, 20), mask)
-    PROCESS_FILE_BACKGROUND.paste(im4, (2705, 20), mask)
-    
-    # noir et blanc ou IA
-    PROCESS_FILE_BACKGROUND.paste(imia1, (20, 1225), mask)
-    PROCESS_FILE_BACKGROUND.paste(imia2, (915, 1225), mask)
-    PROCESS_FILE_BACKGROUND.paste(imia3, (1810, 1225), mask)
-    PROCESS_FILE_BACKGROUND.paste(imia4, (2705, 1225), mask)  
+    mask = PROCESS_FILE_MASK.resize(images[0].size).convert("L")
 
-    # logos
+    # Positionnement des images sur le fond
+    x_positions = [20, 915, 1810, 2705]  # ajuster ou calculer cette liste en fonction de PHOTO_COUNT
+    for img, img_ia, x_pos in zip(images, images_ia, x_positions):
+        PROCESS_FILE_BACKGROUND.paste(img, (x_pos, 20), mask)
+        PROCESS_FILE_BACKGROUND.paste(img_ia, (x_pos, 1225), mask)
+
+    # Gestion des logos si nécessaire
     if ADD_LOGO:
         PROCESS_FILE_BACKGROUND.paste(PROCESS_FILE_LOGO1, (LOGO1_POS['x'], LOGO1_POS['y']), PROCESS_FILE_LOGO1)
         PROCESS_FILE_BACKGROUND.paste(PROCESS_FILE_LOGO2, (LOGO2_POS['x'], LOGO2_POS['y']), PROCESS_FILE_LOGO2)
 
-    # Add margins
+    # Ajout des marges
     PROCESS_FILE_MARGIN.paste(PROCESS_FILE_BACKGROUND, (MARGIN['x'], MARGIN['y']))
     PROCESS_FILE_MARGIN.save(Path(CAPTURE_PATH, "print.jpg"), quality=95)
 
-    #BACKUP
     if BKPIMG:
-        PROCESS_FILE_MARGIN.save(Path(BKP_PATH, str(capture_uuid) + "_print.jpg"), quality=95)
+        PROCESS_FILE_MARGIN.save(Path(BKP_PATH, f"{capture_uuid}_print.jpg"), quality=95)
 
 def print_image(capture_uuid):
     # impression
