@@ -275,9 +275,10 @@ def processImageVertical(capture_uuid, imgName):
     CAPTURE_PATH = Path(CAPTURE_FOLDER, str(capture_uuid))
     img = Image.open(Path(CAPTURE_PATH, imgName))
     #crop = (164, 0, 2428, 1728) # RÃ©solution 2592x1728 
-    crop = (233, 0, 3223, 2304) # RÃ©solution 3456x2304
+    #crop = (233, 0, 3223, 2304) # RÃ©solution 3456x2304
+    crop = (270, 0, 3185, 2229) # RÃ©solution spécial la centrale
     img = img.crop(crop)
-    (width, height) = (1150, 875)
+    (width, height) = (1075, 800)
     img = img.resize((width, height))
     img.save(Path(CAPTURE_PATH,imgName))
     return img
@@ -309,6 +310,8 @@ def capture_to_montage(capture_uuid):
             img_ia = img.convert("L")
         images_ia.append(img_ia)
 
+    mask = PROCESS_FILE_MASK.resize(images[0].size).convert("L")
+    
     if BKPIMG:
         for idx, img_ia in enumerate(images_ia):
             img.save(Path(BKP_PATH, f"{capture_uuid}_{idx+1}.jpg"), quality=95)
@@ -317,24 +320,27 @@ def capture_to_montage(capture_uuid):
     if VERTICAL:
         images = [img.rotate(90, expand=True) for img in images]
         images_ia = [img.rotate(90, expand=True) for img in images_ia]
-
-    mask = PROCESS_FILE_MASK.resize(images[0].size).convert("L")
+        mask = mask.rotate(90, expand=True)
 
     # Positionnement des images sur le fond
-    x_positions = [20, 915, 1810, 2705]  # ajuster ou calculer cette liste en fonction de PHOTO_COUNT
+    #x_positions = [20, 915, 1810, 2705]  # ajuster ou calculer cette liste en fonction de PHOTO_COUNT
+    #centrale
+    x_positions = [20, 840, 1660, 2480]
     for img, img_ia, x_pos in zip(images, images_ia, x_positions):
         PROCESS_FILE_BACKGROUND.paste(img, (x_pos, 20), mask)
         PROCESS_FILE_BACKGROUND.paste(img_ia, (x_pos, 1225), mask)
+        #centrale
+        #PROCESS_FILE_BACKGROUND.paste(img, (x_pos, 57), mask)
+        #PROCESS_FILE_BACKGROUND.paste(img_ia, (x_pos, 1262), mask)
 
     # Gestion des logos si nécessaire
     if ADD_LOGO:
         PROCESS_FILE_BACKGROUND.paste(PROCESS_FILE_LOGO1, (LOGO1_POS['x'], LOGO1_POS['y']), PROCESS_FILE_LOGO1)
         PROCESS_FILE_BACKGROUND.paste(PROCESS_FILE_LOGO2, (LOGO2_POS['x'], LOGO2_POS['y']), PROCESS_FILE_LOGO2)
 
-    # Ajout des marges
+    # Ajout des marges 
     PROCESS_FILE_MARGIN.paste(PROCESS_FILE_BACKGROUND, (MARGIN['x'], MARGIN['y']))
     PROCESS_FILE_MARGIN.save(Path(CAPTURE_PATH, "print.jpg"), quality=95)
-
     if BKPIMG:
         PROCESS_FILE_MARGIN.save(Path(BKP_PATH, f"{capture_uuid}_print.jpg"), quality=95)
 
@@ -443,7 +449,7 @@ def initPhotobooth():
     
 def initConfig():
     logging.info("initConfig")
-    global START, WAITFORSTART, PRICE
+    global START, WAITFORSTART, PRICE, COINS
     global config, CURRENT_PATH, USB_STICK, BKPIMG, BKP_PATH, PHOTO_COUNT,PHOTO_PAUSE,VERTICAL, PROCESS_ASSETS_FOLDER
     global CAPTURE_FOLDER, PROCESS_FILE_BACKGROUND, PROCESS_FILE_MASK, ADD_LOGO,PROCESS_FILE_LOGO1, PROCESS_FILE_LOGO2
     global LOGO1_POS, LOGO2_POS, PROCESS_FILE_MARGIN, PRINT, MARGIN, IA, api
@@ -537,7 +543,9 @@ def initConfig():
         # create API client with custom host, port
         api = webuiapi.WebUIApi(host='uncanny.taile7da6.ts.net', port=7860, sampler = "Euler a")
         logging.info("Serveur IA OK")
-
+    
+    PRICE = config["price"]
+    COINS = PRICE
     WAITFORSTART = PRICE == 0
 
     if WAITFORSTART:
@@ -563,8 +571,21 @@ def main():
         
         if START:
             logging.info("Start sequence")
+
+            #remove interrupts
+            GPIO.remove_event_detect(COIN_PIN)
+            GPIO.remove_event_detect(START_PIN)
+            GPIO.remove_event_detect(CB_PIN)
+
+            #aux lamp on
             GPIO.output(AUX_PIN, True)
+
+            #recreate led matrix (noise from aux_pin)
             TM1637.show("BUSY", colon=False)
+            MAX7219.cleanup()
+            serial = spi(port=0, device=0, gpio=noop())
+            MAX7219 = max7219(serial)
+
             capture_uuid = capture(CAMERA)
             
             startIA = time.time()
@@ -575,7 +596,7 @@ def main():
                 while threading.active_count() > 1:
                     time.sleep(1) 
 
-            output = capture_to_montage(capture_uuid, IA)
+            output = capture_to_montage(capture_uuid)
             
             if PRINT:
                 print_image(capture_uuid)
@@ -587,10 +608,18 @@ def main():
             START = False
             WAITFORSTART = PRICE == 0
             COINS = PRICE
+            #recreate max7219
+            MAX7219.cleanup()
+            serial = spi(port=0, device=0, gpio=noop())
+            MAX7219 = max7219(serial)
             if WAITFORSTART:
                 showArrow()
             else:
                 showSmiley()
+            #restore interruptions
+            GPIO.add_event_detect(COIN_PIN, GPIO.FALLING, callback=coin_interrupt)
+            GPIO.add_event_detect(START_PIN, GPIO.RISING, callback=start_interrupt)
+            GPIO.add_event_detect(CB_PIN, GPIO.RISING, callback=CB_interrupt)
             
     return 0
 
