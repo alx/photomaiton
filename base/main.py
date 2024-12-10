@@ -1,5 +1,5 @@
 import gphoto2 as gp
-import cv2
+#import cv2
 import os
 import time
 import datetime
@@ -10,16 +10,16 @@ from tempfile import mktemp
 import logging
 from pathlib import Path
 import uuid
-import serial
-from serial.tools import list_ports
+#import serial
+#from serial.tools import list_ports
 import json
-from io import BytesIO
+#from io import BytesIO
 import argparse
 import traceback
 import base64
 import requests
-import usb.core
-import db
+#import usb.core
+#import db
 import webuiapi
 import random
 import threading
@@ -31,6 +31,7 @@ from luma.core.virtual import viewport
 from luma.core.legacy import text, show_message
 from luma.core.legacy.font import proportional, CP437_FONT, TINY_FONT, SINCLAIR_FONT, LCD_FONT, ATARI_FONT
 import tm1637
+import urllib3 as urllib
 
 # Pins def
 COIN_PIN = 16
@@ -40,10 +41,10 @@ CB_PIN = 14
 
 
 # constants
-PRICE = 400
+PRICE = 0
 COINS_MULTI = 50
 COINS = PRICE
-WAITFORSTART = False
+WAITFORSTART = True
 START = False
 
 #Globals
@@ -78,6 +79,7 @@ def init_camera():
     error, CAMERA = gp.gp_camera_new()
 
     while True:
+        logging.info("Camera init - connexion")
         error = gp.gp_camera_init(CAMERA)
 
         if error >= gp.GP_OK:
@@ -91,7 +93,13 @@ def init_camera():
 
     # capture pour enclencher le process sinon ÃÂÃÂÃÂÃÂ§a le fait pas
     logging.info("Camera init - first capture")
-    CAMERA.capture(gp.GP_CAPTURE_IMAGE)
+    init = False
+    while init == False:
+        try:
+            CAMERA.capture(gp.GP_CAPTURE_IMAGE)
+            init = True
+        except Exception as e:
+            logging.info("Erreur caméra:"+ str(e))
 
     # continue with rest of program
     logging.info("Camera init - continue")
@@ -161,7 +169,8 @@ def save_ia_image(capture_path, index, prompt):
             
             start = time.time()
 
-            unit0 = webuiapi.ControlNetUnit(input_image=source, 
+            unit0 = webuiapi.ControlNetUnit(image=source, 
+                                            enabled=True,
                                             module='canny', 
                                             model='sdxl_canny [a2e6a438]', 
                                             weight=1, 
@@ -170,7 +179,10 @@ def save_ia_image(capture_path, index, prompt):
                                             guidance_start = 0,
                                             threshold_a = 100,
                                             threshold_b = 200)
-
+            #ctrlUnit = []
+            #if not prompt["respect_pose"] or prompt["respect_pose"] == True:
+            #    ctrlUnit = [unit0]
+            ctrlUnit = [unit0]
             reactor = webuiapi.ReActor(
                 img=source,
                 enable=True,
@@ -206,7 +218,7 @@ def save_ia_image(capture_path, index, prompt):
                                 steps=9,
                                 width=1150,
                                 height=875,
-                                controlnet_units=[unit0],
+                                controlnet_units=ctrlUnit,
                                 restore_faces=False,
                                 reactor=reactor)
             #capture_uuid = datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
@@ -243,10 +255,43 @@ def save_ia_image(capture_path, index, prompt):
 
 def threadIA(capture_uuid, id):
     CAPTURE_PATH = Path(CAPTURE_FOLDER, str(capture_uuid))
-    
-    # mode alÃ©atoire
-    lettres = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K']
 
+    #parser = argparse.ArgumentParser(description="Read IA config file path")
+    #parser.add_argument(
+    #    "--config",
+    #    type=str,
+    #    default=Path(CURRENT_PATH, "configIA.json"),
+    #    help="Path to the configuration file"
+    #)
+    #args = parser.parse_args()
+
+    #with open(args.config, "r") as f:
+    #    config = json.load(f)
+
+    #current_prompt = config[id]
+    #save_ia_image(CAPTURE_PATH, id, current_prompt)
+
+    # mode webui
+    #with urllib.request.urlopen("http://uncanny.taile7da6.ts.net:5000/config.json") as url:
+    #   prompts = json.load(url)
+    #    current_prompt = prompts[id]
+    #    save_ia_image(CAPTURE_PATH, id, current_prompt)
+    
+    # mode flashback fixe
+    #idPrompt = "1D"
+    #if id == 0:
+    #    idPrompt = "2A"
+    #if id == 1:
+    #    idPrompt = "1K"
+    #if id == 2:
+    #    idPrompt = "1I"
+    #if id == 3:
+    #    idPrompt = "2C"
+    #lettres = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K']
+    #save_ia_image(CAPTURE_PATH, id, config["prompts"][idPrompt])
+    
+    # mode alÃ©atoire sans lettre K
+    lettres = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J']
     save_ia_image(CAPTURE_PATH, id, config["prompts"][str(id+1)+ str(random.choice(lettres))])
 
 
@@ -275,10 +320,11 @@ def processImageVertical(capture_uuid, imgName):
     CAPTURE_PATH = Path(CAPTURE_FOLDER, str(capture_uuid))
     img = Image.open(Path(CAPTURE_PATH, imgName))
     #crop = (164, 0, 2428, 1728) # RÃ©solution 2592x1728 
-    #crop = (233, 0, 3223, 2304) # RÃ©solution 3456x2304
-    crop = (270, 0, 3185, 2229) # RÃ©solution spécial la centrale
+    crop = (233, 0, 3223, 2304) # RÃ©solution 3456x2304
+    #crop = (270, 0, 3185, 2229) # RÃ©solution spécial la centrale
     img = img.crop(crop)
-    (width, height) = (1075, 800)
+    (width, height) = (1150, 875)
+    #(width, height) = (1075, 800) #centrale
     img = img.resize((width, height))
     img.save(Path(CAPTURE_PATH,imgName))
     return img
@@ -323,9 +369,8 @@ def capture_to_montage(capture_uuid):
         mask = mask.rotate(90, expand=True)
 
     # Positionnement des images sur le fond
-    #x_positions = [20, 915, 1810, 2705]  # ajuster ou calculer cette liste en fonction de PHOTO_COUNT
-    #centrale
-    x_positions = [20, 840, 1660, 2480]
+    x_positions = [20, 915, 1810, 2705]  # ajuster ou calculer cette liste en fonction de PHOTO_COUNT
+    # x_positions = [20, 840, 1660, 2480] #centrale
     for img, img_ia, x_pos in zip(images, images_ia, x_positions):
         PROCESS_FILE_BACKGROUND.paste(img, (x_pos, 20), mask)
         PROCESS_FILE_BACKGROUND.paste(img_ia, (x_pos, 1225), mask)
@@ -370,48 +415,70 @@ def print_image(capture_uuid):
     # sleep(1)
 
 def showArrow():
+    logging.info("showArrow")
     global MAX7219,PROCESS_ASSETS_FOLDER
     arrowImg = Image.open(Path(PROCESS_ASSETS_FOLDER, "arrow.png"))
     arrowImg = arrowImg.convert('1')
     MAX7219.display(arrowImg)
 
 def showSmiley():
+    logging.info("showSmiley")
     global MAX7219, PROCESS_ASSETS_FOLDER
     smileyImg = Image.open(Path(PROCESS_ASSETS_FOLDER, "smiley.png"))
     smileyImg = smileyImg.convert('1')
     MAX7219.display(smileyImg)
 
 def CB_interrupt(channel):
-    global COINS, WAITFORSTART
+    global COINS, WAITFORSTART, TM1637
     #Calc signal duration
     startMillis = time.monotonic()
     endMillis = startMillis
-    while GPIO.input(CB_PIN):
+    while GPIO.input(CB_PIN) and startMillis - endMillis < 1:
         endMillis = time.monotonic()
-    startMillis = startMillis * 1000
-    endMillis = endMillis * 1000
-    logging.debug("CB duration=")
-    logging.debug(endMillis - startMillis)
-    if endMillis - startMillis > 85 and endMillis - startMillis < 115:
-        WAITFORSTART = True
-        COINS = 0
-        showArrow()
+        if endMillis - startMillis > 1:
+            break
+
+    #startMillis = startMillis * 1000
+    #endMillis = endMillis * 1000
+    #logging.debug("CB duration=")
+    #logging.debug(endMillis - startMillis)
+    if endMillis - startMillis > 1:
+    	GPIO.remove_event_detect(CB_PIN)
+    	logging.debug("CB duration=")
+    	logging.debug(endMillis - startMillis)
+    	WAITFORSTART = True
+    	COINS = 0
+    	showArrow()
+    	TM1637.show(" " + str(COINS), colon=True)
 
 def coin_interrupt(channel):
     global COINS, COINS_MULTI, START, WAITFORSTART, TM1637
     
     COINS = COINS - COINS_MULTI
-    
     if COINS <= 0:
+        GPIO.remove_event_detect(COIN_PIN)
         WAITFORSTART = True
         COINS = 0
         showArrow()
+        TM1637.show(" " + str(COINS), colon=True)
     
         
 def start_interrupt(channel):
     global START, WAITFORSTART
+    
     if WAITFORSTART :
-        START = True
+        #Calc signal duration
+        startMillis = time.monotonic()
+        endMillis = startMillis
+        while GPIO.input(START_PIN) and ((endMillis*1000) - (startMillis*1000)) < 500:
+            endMillis = time.monotonic()
+        startMillis = startMillis * 1000
+        endMillis = endMillis * 1000
+        logging.debug("start duration=")
+        logging.debug(endMillis - startMillis)
+        if endMillis - startMillis > 5:
+            GPIO.remove_event_detect(START_PIN)
+            START = True
         
     
 def initPhotobooth():
@@ -425,16 +492,12 @@ def initPhotobooth():
     GPIO.setup(CB_PIN, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
     GPIO.setup(AUX_PIN, GPIO.OUT)
     GPIO.output(AUX_PIN, False)
-    GPIO.add_event_detect(COIN_PIN, GPIO.FALLING, callback=coin_interrupt)
-    GPIO.add_event_detect(START_PIN, GPIO.RISING, callback=start_interrupt)
-    GPIO.add_event_detect(CB_PIN, GPIO.RISING, callback=CB_interrupt)
     
     #7 segment
     logging.info("initSegment")
     TM1637 = tm1637.TM1637(clk=15, dio=18)
     TM1637.brightness(1)
     TM1637.show(str("    "), colon=True)
-    TM1637.show(" " + str(PRICE), colon=True)
     
     #led matrix
     logging.info("initLedMatrix")
@@ -446,6 +509,15 @@ def initPhotobooth():
     
     #init config
     initConfig()
+
+    if PRICE == 0:
+        TM1637.show("Free", colon=False)
+    else:
+        TM1637.show(" " + str(PRICE), colon=True)
+        
+    GPIO.add_event_detect(COIN_PIN, GPIO.FALLING, callback=coin_interrupt)
+    GPIO.add_event_detect(START_PIN, GPIO.RISING, callback=start_interrupt)
+    GPIO.add_event_detect(CB_PIN, GPIO.RISING, callback=CB_interrupt)
     
 def initConfig():
     logging.info("initConfig")
@@ -481,7 +553,9 @@ def initConfig():
     VERTICAL = config["vertical"]  # strip ÃÂÃÂ  la verticale
 
     # Folder containing background
+    logging.info(CURRENT_PATH)
     PROCESS_ASSETS_FOLDER = Path(CURRENT_PATH, "assets/")
+    logging.info(PROCESS_ASSETS_FOLDER)
     if not PROCESS_ASSETS_FOLDER.exists():
         os.makedirs(PROCESS_ASSETS_FOLDER)
 
@@ -541,7 +615,7 @@ def initConfig():
         api = webuiapi.WebUIApi()
 
         # create API client with custom host, port
-        api = webuiapi.WebUIApi(host='uncanny.taile7da6.ts.net', port=7860, sampler = "Euler a")
+        api = webuiapi.WebUIApi(host='XXXX', port=7860, sampler = "Euler a")
         logging.info("Serveur IA OK")
     
     PRICE = config["price"]
@@ -566,9 +640,18 @@ def main():
         #refresh Segment
         currTime = time.time()
         if currTime - lastRefresh >= 0.5:
-            TM1637.show(" " + str(COINS), colon=True)
+            if PRICE == 0:
+                TM1637.show("Free", colon=False)
+            else:
+                TM1637.show(" " + str(COINS), colon=True)
             lastRefresh = currTime
-        
+
+        #check fichier de démarrage.
+        if os.path.exists("start.txt"):
+            os.remove("start.txt")
+            START = True
+
+                
         if START:
             logging.info("Start sequence")
 
@@ -593,8 +676,9 @@ def main():
             if IA:
                 logging.info("Process:" + str(threading.active_count()))
                 logging.info("wait for IA")
-                while threading.active_count() > 1:
+                while threading.active_count() > 6:
                     time.sleep(1) 
+                    logging.info("Process:" + str(threading.active_count()))
 
             output = capture_to_montage(capture_uuid)
             
@@ -608,6 +692,9 @@ def main():
             START = False
             WAITFORSTART = PRICE == 0
             COINS = PRICE
+            if PRICE == 0:
+                TM1637.show("Free", colon=False)
+
             #recreate max7219
             MAX7219.cleanup()
             serial = spi(port=0, device=0, gpio=noop())
@@ -616,6 +703,9 @@ def main():
                 showArrow()
             else:
                 showSmiley()
+            
+            while GPIO.input(START_PIN):
+                START = False
             #restore interruptions
             GPIO.add_event_detect(COIN_PIN, GPIO.FALLING, callback=coin_interrupt)
             GPIO.add_event_detect(START_PIN, GPIO.RISING, callback=start_interrupt)
@@ -627,6 +717,7 @@ def main():
 if __name__ == "__main__":
     print("START")
     initPhotobooth()
+    logging.info("Init OK")
     main()
     GPIO.cleanup()
     logging.info("Stop")
